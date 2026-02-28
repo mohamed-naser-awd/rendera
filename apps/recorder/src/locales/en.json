@@ -1,0 +1,12 @@
+{
+  "recorder": {
+    "record": "Record",
+    "stop": "Stop",
+    "camera": "Camera",
+    "mic": "Microphone",
+    "pcSound": "PC Sound",
+    "on": "On",
+    "off": "Off",
+    "muted": "Muted"
+  }
+}

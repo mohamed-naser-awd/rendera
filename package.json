@@ -1,0 +1,21 @@
+{
+  "name": "rendera",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Open source video editor - Recorder + Editor",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:main\" \"npm run dev:projects\" \"npm run dev:recorder\" \"npm run dev:editor\" \"npm run dev:server\"",
+    "dev:main": "npm run dev -w main",
+    "dev:projects": "npm run dev -w @rendera/projects",
+    "dev:recorder": "npm run dev -w @rendera/recorder",
+    "dev:editor": "npm run dev -w @rendera/editor",
+    "dev:server": "node scripts/run-server.js --reload",
+    "setup:server": "node scripts/setup-server-venv.js",
+    "build": "npm run build -w main && npm run build -w @rendera/projects && npm run build -w @rendera/recorder && npm run build -w @rendera/editor",
+    "start": "npm run start -w main"
+  },
+  "workspaces": ["main", "apps/projects", "apps/recorder", "apps/editor"],
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

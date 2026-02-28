@@ -1,0 +1,14 @@
+# Config-driven AI models. Users can add their own.
+# Each entry: id, name, method, url_path, input_type, output_type, parameters
+
+# models:
+#   - id: noise_cancellation
+#     name: Noise Cancellation
+#     method: POST
+#     url_path: /api/denoise
+#     input_type: audio
+#     output_type: audio
+#     parameters:
+#       - name: strength
+#         type: number
+#         default: 0.8
