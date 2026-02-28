@@ -16,6 +16,9 @@ export const useThemeStore = create<ThemeState>()(
       setTheme: (theme) => {
         set({ theme });
         document.documentElement.classList.toggle('dark', theme === 'dark');
+        try {
+          localStorage.setItem('rendera-theme', JSON.stringify({ state: { theme }, version: 1 }));
+        } catch {}
       },
       toggleTheme: () =>
         set((s) => {

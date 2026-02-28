@@ -7,7 +7,7 @@ export function LanguageSelect() {
     <select
       value={i18n.language}
       onChange={(e) => i18n.changeLanguage(e.target.value)}
-      className="ml-auto bg-slate-700 rounded px-2 py-1 text-sm"
+      className="ml-auto bg-[#383838] border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
     >
       <option value="en">EN</option>
       <option value="ar">AR</option>

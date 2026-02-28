@@ -1,6 +1,6 @@
 export function LoadingState() {
   return (
-    <div className="py-12 text-center text-slate-500 dark:text-slate-400">
+    <div className="py-12 text-center text-slate-500 dark:text-white/60">
       Loading projects…
     </div>
   );

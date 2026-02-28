@@ -1,11 +1,9 @@
-import { useTranslation } from 'react-i18next';
 import { useRecorderStore } from '../stores/recorderStore';
 import { RecordButton } from './RecordButton';
 import { ToggleControl } from './ToggleControl';
 import { LanguageSelect } from './LanguageSelect';
 
 export function RecorderControls() {
-  const { i18n } = useTranslation();
   const {
     cameraOn,
     toggleCamera,
@@ -16,10 +14,7 @@ export function RecorderControls() {
   } = useRecorderStore();
 
   return (
-    <div
-      className="flex items-center gap-4 p-4 bg-slate-900 text-white rounded-lg shadow-lg"
-      dir={i18n.language === 'ar' ? 'rtl' : 'ltr'}
-    >
+    <div className="flex items-center gap-4 p-4 bg-[#2d2d2d] text-white rounded-lg border border-white/10 shadow-lg">
       <RecordButton />
       <ToggleControl
         labelKey="recorder.camera"

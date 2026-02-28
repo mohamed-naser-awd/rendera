@@ -34,21 +34,21 @@ export function CreateProjectDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-xl bg-white dark:bg-slate-800 shadow-xl border border-slate-200 dark:border-slate-700 p-6"
+        className="w-full max-w-md rounded-xl bg-white dark:bg-[#2d2d2d] shadow-xl border border-slate-200 dark:border-white/10 p-6"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-4">
+        <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">
           New project
         </h2>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div>
             <label
               htmlFor="project-name"
-              className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1"
+              className="block text-sm font-medium text-slate-700 dark:text-white/80 mb-1"
             >
               Name
             </label>
@@ -58,16 +58,16 @@ export function CreateProjectDialog({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder={DEFAULT_PROJECT_NAME}
-              className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className="w-full rounded-lg border border-slate-300 dark:border-white/10 bg-slate-50 dark:bg-[#383838] text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-white/40 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
               autoFocus
             />
           </div>
           <div>
             <label
               htmlFor="project-description"
-              className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1"
+              className="block text-sm font-medium text-slate-700 dark:text-white/80 mb-1"
             >
-              Description <span className="text-slate-400">(optional)</span>
+              Description <span className="text-slate-500 dark:text-white/50">(optional)</span>
             </label>
             <textarea
               id="project-description"
@@ -75,21 +75,21 @@ export function CreateProjectDialog({
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Add a description..."
               rows={3}
-              className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
+              className="w-full rounded-lg border border-slate-300 dark:border-white/10 bg-slate-50 dark:bg-[#383838] text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-white/40 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
             />
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700"
+              className="px-4 py-2 rounded-lg text-slate-600 dark:text-white/80 hover:bg-slate-100 dark:hover:bg-white/10"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={creating}
-              className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-medium disabled:opacity-50"
+              className="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white font-medium disabled:opacity-50"
             >
               {creating ? 'Creating…' : 'Create'}
             </button>

@@ -1,3 +1,57 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Theme-aware base */
+html, body {
+  background-color: #f8fafc;
+  color: #0f172a;
+}
+html.dark, html.dark body {
+  background-color: #1e1e1e;
+  color: #ffffff;
+}
+
+/* Timeline scrollbars: thin, rounded, theme-aware */
+.timeline-scroll-area {
+  scrollbar-gutter: stable;
+}
+.timeline-scroll-area::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.timeline-scroll-area::-webkit-scrollbar-track {
+  background: rgb(241 245 249);
+  border-radius: 5px;
+}
+.timeline-scroll-area::-webkit-scrollbar-thumb {
+  background: rgb(148 163 184);
+  border-radius: 5px;
+}
+.timeline-scroll-area::-webkit-scrollbar-thumb:hover {
+  background: rgb(100 116 139);
+}
+.timeline-scroll-area::-webkit-scrollbar-corner {
+  background: rgb(241 245 249);
+}
+html.dark .timeline-scroll-area::-webkit-scrollbar-track {
+  background: rgb(37 37 37);
+}
+html.dark .timeline-scroll-area::-webkit-scrollbar-thumb {
+  background: rgb(71 85 105);
+}
+html.dark .timeline-scroll-area::-webkit-scrollbar-thumb:hover {
+  background: rgb(100 116 139);
+}
+html.dark .timeline-scroll-area::-webkit-scrollbar-corner {
+  background: rgb(37 37 37);
+}
+@supports (scrollbar-width: thin) {
+  .timeline-scroll-area {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(148 163 184) rgb(241 245 249);
+  }
+  html.dark .timeline-scroll-area {
+    scrollbar-color: rgb(71 85 105) rgb(37 37 37);
+  }
+}

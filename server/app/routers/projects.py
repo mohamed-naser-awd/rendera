@@ -1,13 +1,20 @@
 """Projects API - CRUD for projects stored in SQLite."""
 
 import json
-from fastapi import APIRouter, HTTPException
+import uuid
+from datetime import datetime
+from pathlib import Path
+
+from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import Any
 
 from app.db import get_db
 
 router = APIRouter()
+
+MEDIA_BASE = Path(__file__).resolve().parent.parent.parent / "media"
 
 
 class ProjectCreate(BaseModel):
@@ -45,10 +52,68 @@ async def list_projects() -> list[dict]:
             "duration": r["duration"],
             "createdAt": r["created_at"],
             "updatedAt": r["updated_at"],
-            "root": json.loads(r["root"]) if r["root"] else {"type": "stack", "items": []},
+            "root": _root_with_media(json.loads(r["root"]) if r["root"] else {"type": "stack", "items": []}),
         }
         for r in rows
     ]
+
+
+def _root_with_media(root: dict | None) -> dict:
+    """Ensure root has media array."""
+    r = dict(root) if root else {"type": "stack", "items": []}
+    media = r.get("media")
+    r["media"] = media if isinstance(media, list) else []
+    return r
+
+
+@router.post("/{project_id}/media")
+async def add_project_media(project_id: str, file: UploadFile = File(...)) -> dict:
+    """Upload a file to project media and update the project."""
+    async with get_db() as db:
+        cursor = await db.execute(
+            "SELECT root FROM projects WHERE id = ?", (project_id,)
+        )
+        row = await cursor.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    root = json.loads(row["root"]) if row["root"] else {"type": "stack", "items": []}
+    root = _root_with_media(root)
+    media_list = list(root.get("media") or [])
+
+    # Save file to media/{project_id}/{unique}_{filename}
+    ext = Path(file.filename or "file").suffix
+    safe_name = f"{uuid.uuid4().hex[:8]}{ext}"
+    project_media_dir = MEDIA_BASE / project_id
+    project_media_dir.mkdir(parents=True, exist_ok=True)
+    dest = project_media_dir / safe_name
+    contents = await file.read()
+    dest.write_bytes(contents)
+
+    # Store path relative to project (media/filename)
+    stored_path = f"media/{safe_name}"
+    media_list.append({"path": stored_path})
+    root["media"] = media_list
+
+    async with get_db() as db:
+        await db.execute(
+            "UPDATE projects SET root = ?, updated_at = ? WHERE id = ?",
+            (json.dumps(root), datetime.utcnow().isoformat(), project_id),
+        )
+        await db.commit()
+
+    return {"path": stored_path}
+
+
+@router.get("/{project_id}/media/{filename}")
+async def get_project_media_file(project_id: str, filename: str) -> FileResponse:
+    """Serve a media file from a project."""
+    if ".." in filename or "/" in filename or "\\" in filename:
+        raise HTTPException(status_code=400, detail="Invalid path")
+    file_path = MEDIA_BASE / project_id / filename
+    if not file_path.exists() or not file_path.is_file():
+        raise HTTPException(status_code=404, detail="Media file not found")
+    return FileResponse(file_path, media_type=None)
 
 
 @router.get("/{project_id}")
@@ -71,18 +136,16 @@ async def get_project(project_id: str) -> dict:
         "duration": row["duration"],
         "createdAt": row["created_at"],
         "updatedAt": row["updated_at"],
-        "root": json.loads(row["root"]) if row["root"] else {"type": "stack", "items": []},
+        "root": _root_with_media(json.loads(row["root"]) if row["root"] else {"type": "stack", "items": []}),
     }
 
 
 @router.post("")
 async def create_project(body: ProjectCreate) -> dict:
     """Create a new project."""
-    import uuid
-    from datetime import datetime
-
     project_id = str(uuid.uuid4())
     now = datetime.utcnow().isoformat()
+    root = _root_with_media(body.root)
 
     async with get_db() as db:
         await db.execute(
@@ -96,7 +159,7 @@ async def create_project(body: ProjectCreate) -> dict:
                 body.fps,
                 now,
                 now,
-                json.dumps(body.root),
+                json.dumps(root),
             ),
         )
         await db.commit()

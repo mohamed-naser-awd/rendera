@@ -7,6 +7,7 @@ import { spawn, ChildProcess } from 'child_process';
 let apiUrl = process.env.RENDERA_API_URL || '';
 let serverProcess: ChildProcess | null = null;
 const isDev = !app.isPackaged || process.env.NODE_ENV === 'development';
+const APP_NAME = 'Rendera';
 let projectsWindow: BrowserWindow | null = null;
 let recorderWindow: BrowserWindow | null = null;
 let editorWindow: BrowserWindow | null = null;
@@ -155,8 +156,26 @@ function getEditorWindow(): BrowserWindow | null {
   return editorWindow;
 }
 
+function getFocusedWindow(): BrowserWindow | null {
+  return BrowserWindow.getFocusedWindow();
+}
+
 function setupApplicationMenu(): void {
   const template: Electron.MenuItemConstructorOptions[] = [
+    {
+      label: APP_NAME,
+      submenu: [
+        { role: 'about' as const },
+        { type: 'separator' as const },
+        { role: 'services' as const },
+        { type: 'separator' as const },
+        { role: 'hide' as const },
+        { role: 'hideOthers' as const },
+        { role: 'unhide' as const },
+        { type: 'separator' as const },
+        { role: 'quit' as const },
+      ],
+    },
     {
       label: 'File',
       submenu: [
@@ -173,6 +192,28 @@ function setupApplicationMenu(): void {
             }
           },
         },
+        {
+          label: 'Projects',
+          accelerator: 'CmdOrCtrl+Shift+P',
+          click: () => {
+            createProjectsWindow();
+            projectsWindow?.focus();
+          },
+        },
+        { type: 'separator' as const },
+        { role: 'close' as const },
+      ],
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' as const },
+        { role: 'redo' as const },
+        { type: 'separator' as const },
+        { role: 'cut' as const },
+        { role: 'copy' as const },
+        { role: 'paste' as const },
+        { role: 'selectAll' as const },
       ],
     },
     {
@@ -185,7 +226,6 @@ function setupApplicationMenu(): void {
             { label: 'Dark', click: () => getEditorWindow()?.webContents.send('menu:set-theme', 'dark') },
           ],
         },
-        { type: 'separator' },
         {
           label: 'Language',
           submenu: [
@@ -193,6 +233,22 @@ function setupApplicationMenu(): void {
             { label: 'العربية', click: () => getEditorWindow()?.webContents.send('menu:set-language', 'ar') },
           ],
         },
+        { type: 'separator' as const },
+        {
+          label: 'Developer Tools',
+          accelerator: process.platform === 'darwin' ? 'Alt+Cmd+I' : 'Ctrl+Shift+I',
+          click: () => getFocusedWindow()?.webContents.toggleDevTools(),
+        },
+        ...(isDev
+          ? [
+              { type: 'separator' as const },
+              {
+                label: 'Reload',
+                accelerator: 'CmdOrCtrl+R',
+                click: () => getFocusedWindow()?.reload(),
+              },
+            ]
+          : []),
       ],
     },
     {
@@ -206,10 +262,23 @@ function setupApplicationMenu(): void {
     },
     {
       label: 'Help',
-      submenu: [{ role: 'about' as const }],
+      submenu: [
+        { label: 'Learn', click: () => {} },
+        { label: 'Support', click: () => {} },
+        { label: "What's New", click: () => {} },
+        { type: 'separator' as const },
+        { role: 'about' as const },
+      ],
     },
   ];
-  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+
+  // On Windows/Linux, remove the first "app name" menu (macOS-only pattern)
+  const menuTemplate =
+    process.platform === 'darwin'
+      ? template
+      : template.filter((item) => item.label !== APP_NAME);
+
+  Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate));
 }
 
 app.whenReady().then(async () => {

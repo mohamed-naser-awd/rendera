@@ -15,7 +15,7 @@ export function EditableProjectName() {
     if (editing) inputRef.current?.focus();
   }, [editing]);
 
-  if (!project) return <span className="text-slate-500">No project</span>;
+  if (!project) return <span className="text-slate-500 dark:text-white/50">No project</span>;
 
   const currentName = project.name;
 
@@ -44,7 +44,7 @@ export function EditableProjectName() {
             setEditing(false);
           }
         }}
-        className="text-xl font-semibold bg-slate-700 rounded px-2 py-1 min-w-[8rem] focus:outline-none focus:ring-2 focus:ring-emerald-500"
+        className="text-xl font-semibold bg-slate-100 dark:bg-[#383838] border border-slate-300 dark:border-white/10 rounded px-2 py-1 min-w-[8rem] text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
       />
     );
   }
@@ -57,7 +57,7 @@ export function EditableProjectName() {
       <button
         type="button"
         onClick={() => setEditing(true)}
-        className="text-xl font-semibold text-left hover:bg-slate-700/50 rounded px-2 py-1 -mx-2 truncate max-w-md"
+        className="text-xl font-semibold text-left text-slate-900 dark:text-white hover:bg-slate-100 dark:hover:bg-white/10 rounded px-2 py-1 -mx-2 truncate max-w-md"
         title="Click or double-click to edit name"
       >
         {project.name || 'Untitled Project'}
@@ -65,7 +65,7 @@ export function EditableProjectName() {
       <button
         type="button"
         onClick={() => setEditing(true)}
-        className="p-1 rounded opacity-0 group-hover/name:opacity-100 hover:bg-slate-700/50 text-slate-400 hover:text-white flex-shrink-0"
+        className="p-1 rounded opacity-0 group-hover/name:opacity-100 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-500 dark:text-white/60 hover:text-slate-700 dark:hover:text-white flex-shrink-0"
         title="Edit name"
       >
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

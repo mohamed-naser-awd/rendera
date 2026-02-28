@@ -10,6 +10,7 @@
     "dev:recorder": "npm run dev -w @rendera/recorder",
     "dev:editor": "npm run dev -w @rendera/editor",
     "dev:server": "node scripts/run-server.js --reload",
+    "setup": "npm install && npm run setup:server",
     "setup:server": "node scripts/setup-server-venv.js",
     "build": "npm run build -w main && npm run build -w @rendera/projects && npm run build -w @rendera/recorder && npm run build -w @rendera/editor",
     "start": "npm run start -w main"

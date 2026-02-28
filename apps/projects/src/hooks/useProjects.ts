@@ -109,6 +109,47 @@ export function useProjects() {
     window.electronAPI?.openRecorder?.(id);
   }
 
+  async function importProjectFromFile(file: File): Promise<void> {
+    if (creating || !window.electronAPI?.openEditor) return;
+    setCreating(true);
+    setError(null);
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text) as {
+        name?: string;
+        description?: string;
+        resolution?: string;
+        fps?: number;
+        root?: { type: string; items?: unknown[] };
+      };
+      const root = data.root;
+      if (!root || typeof root !== 'object' || root.type !== 'stack') {
+        throw new Error('Invalid project file: missing or invalid root (expected { type: "stack", items: [...] })');
+      }
+      const name = ((data.name ?? file.name.replace(/\.(json|rendera)$/i, '')) || DEFAULT_PROJECT_NAME).trim();
+      const baseUrl = await getApiBaseUrl();
+      const res = await fetch(`${baseUrl}/api/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: name || DEFAULT_PROJECT_NAME,
+          description: data.description ?? '',
+          resolution: data.resolution ?? '1920x1080',
+          fps: data.fps ?? 30,
+          root: { type: 'stack', items: Array.isArray(root.items) ? root.items : [] },
+        }),
+      });
+      if (!res.ok) throw new Error('Failed to import project');
+      const { id } = await res.json();
+      await fetchProjects();
+      window.electronAPI.openEditor(id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to import project file');
+    } finally {
+      setCreating(false);
+    }
+  }
+
   const hasElectron =
     typeof window !== 'undefined' &&
     !!(window.electronAPI?.openEditor ?? window.electronAPI?.openRecorder);
@@ -122,6 +163,7 @@ export function useProjects() {
     fetchProjects,
     createProject,
     createAndRecord,
+    importProjectFromFile,
     deleteProject,
     openProject,
     recordProject,

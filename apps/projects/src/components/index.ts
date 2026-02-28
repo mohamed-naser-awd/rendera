@@ -1,3 +1,7 @@
+export { Sidebar } from './Sidebar';
+export { QuickActions } from './QuickActions';
+export { ContentTabs } from './ContentTabs';
+export { AssetsTabs } from './AssetsTabs';
 export { PageHeader } from './PageHeader';
 export { CommandToolbar } from './CommandToolbar';
 export { CreateProjectDialog } from './CreateProjectDialog';

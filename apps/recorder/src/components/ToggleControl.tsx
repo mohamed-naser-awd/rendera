@@ -22,7 +22,11 @@ export function ToggleControl({
   return (
     <button
       onClick={onToggle}
-      className={`px-3 py-2 rounded ${isOn ? 'bg-blue-600' : 'bg-slate-600'}`}
+      className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+        isOn
+          ? 'bg-emerald-500 hover:bg-emerald-600 text-white'
+          : 'bg-[#383838] hover:bg-[#424242] text-white/90 border border-white/5'
+      }`}
       title={label}
     >
       {label} {status}

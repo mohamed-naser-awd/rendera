@@ -18,19 +18,19 @@ export function ProjectCard({
 }: ProjectCardProps) {
   return (
     <li
-      className="group flex items-center gap-4 p-4 rounded-xl bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 hover:shadow-md transition-all cursor-pointer"
+      className="group flex items-center gap-4 p-4 rounded-lg bg-slate-50 dark:bg-[#252525] border border-slate-200 dark:border-white/5 hover:border-slate-300 dark:hover:border-white/10 hover:bg-slate-100 dark:hover:bg-[#2a2a2a] transition-all cursor-pointer"
       onClick={() => onOpen(project.id)}
     >
       <div className="flex-1 min-w-0">
-        <p className="font-medium text-slate-800 dark:text-slate-100 truncate">
+        <p className="font-medium text-slate-900 dark:text-white truncate">
           {project.name || 'Untitled'}
         </p>
         {project.description ? (
-          <p className="text-sm text-slate-500 dark:text-slate-400 truncate">
+          <p className="text-sm text-slate-500 dark:text-white/60 truncate">
             {project.description}
           </p>
         ) : null}
-        <p className="text-sm text-slate-500 dark:text-slate-400">
+        <p className="text-sm text-slate-500 dark:text-white/50">
           {project.resolution} · {project.fps} fps · {formatDate(project.updatedAt)}
         </p>
       </div>
@@ -42,7 +42,7 @@ export function ProjectCard({
                 e.stopPropagation();
                 onRecord(project.id);
               }}
-              className="p-2 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-emerald-100 dark:hover:bg-emerald-900/40"
+              className="p-2 rounded-lg bg-slate-200 dark:bg-white/10 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 text-slate-700 dark:text-white"
               title="Record"
             >
               <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
@@ -51,7 +51,7 @@ export function ProjectCard({
             </button>
             <button
               onClick={(e) => onDelete(project.id, e)}
-              className="p-2 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-red-100 dark:hover:bg-red-900/40"
+              className="p-2 rounded-lg bg-slate-200 dark:bg-white/10 hover:bg-red-100 dark:hover:bg-red-500/20 text-slate-700 dark:text-white"
               title="Delete"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

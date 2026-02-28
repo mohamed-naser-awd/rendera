@@ -1,3 +1,9 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Shared dark theme base - matches across all apps */
+html, body {
+  background-color: #1e1e1e;
+  color: #ffffff;
+}

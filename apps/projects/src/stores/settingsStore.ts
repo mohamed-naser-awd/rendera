@@ -14,6 +14,10 @@ interface SettingsState {
 
 function applyTheme(theme: Theme) {
   document.documentElement.classList.toggle('dark', theme === 'dark');
+  // Sync to shared key so editor/recorder windows pick up the same theme
+  try {
+    localStorage.setItem('rendera-theme', JSON.stringify({ state: { theme }, version: 1 }));
+  } catch {}
 }
 
 function applyLanguage(lang: Language) {
@@ -24,7 +28,7 @@ function applyLanguage(lang: Language) {
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
-      theme: 'light',
+      theme: 'dark',
       language: 'en',
       setTheme: (theme) => {
         applyTheme(theme);

@@ -23,7 +23,7 @@ export function ProjectList({
   }
 
   return (
-    <ul className="space-y-3">
+    <ul className="space-y-2">
       {projects.map((project) => (
         <ProjectCard
           key={project.id}
