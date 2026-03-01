@@ -16,9 +16,6 @@ export const useThemeStore = create<ThemeState>()(
       setTheme: (theme) => {
         set({ theme });
         document.documentElement.classList.toggle('dark', theme === 'dark');
-        try {
-          localStorage.setItem('rendera-theme', JSON.stringify({ state: { theme }, version: 1 }));
-        } catch {}
       },
       toggleTheme: () =>
         set((s) => {
@@ -27,6 +24,18 @@ export const useThemeStore = create<ThemeState>()(
           return { theme: next };
         }),
     }),
-    { name: 'rendera-theme' }
+    {
+      name: 'rendera-theme',
+      version: 1,
+      partialize: (s) => ({ theme: s.theme }),
+      migrate: (persistedState: unknown) => {
+        if (!persistedState || typeof persistedState !== 'object') return { theme: 'dark' as Theme };
+        const s = persistedState as Record<string, unknown>;
+        // Handle nested format from manual localStorage or older persist
+        const state = (s.state as Record<string, unknown>) ?? s;
+        const theme = state.theme === 'light' || state.theme === 'dark' ? state.theme : 'dark';
+        return { theme };
+      },
+    }
   )
 );

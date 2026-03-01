@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { useProjectStore } from '../stores/projectStore';
 import type { MediaItem } from '../stores/projectStore';
 import { usePlaybackStore } from '../stores/playbackStore';
+import { useMediaSelectionStore } from '../stores/mediaSelectionStore';
+import { useTimelineSelectionStore } from '../stores/timelineSelectionStore';
 import { getApiBaseUrl } from '../../../../shared/getApiUrl';
 import { setDragMediaData } from './NodePalette';
 
@@ -51,8 +53,8 @@ function MediaThumbnail({
 
   if (isText) {
     return (
-      <div className="w-14 h-14 flex items-center justify-center rounded bg-slate-300 dark:bg-[#404040] text-slate-600 dark:text-white/70">
-        <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <div className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded bg-slate-300 dark:bg-[#404040] text-slate-600 dark:text-white/70">
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16m-7 6h7" />
         </svg>
       </div>
@@ -131,7 +133,8 @@ export function LeftSidebar() {
   const [dragOver, setDragOver] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT);
-  const [selectedMediaPath, setSelectedMediaPath] = useState<string | null>(null);
+  const { selectedMediaPath, setSelectedMediaPath } = useMediaSelectionStore();
+  const { clearSelection } = useTimelineSelectionStore();
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; path: string } | null>(null);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const addMenuRef = useRef<HTMLDivElement>(null);
@@ -432,11 +435,13 @@ export function LeftSidebar() {
               ) : (
                 media.map((item, idx) => {
                   const isActive = selectedMediaPath === item.path;
-                  const label = item.path.startsWith('text:')
-                    ? t('editor.media.text', 'Text')
+                  const isTextItem = item.path.startsWith('text:');
+                  const rawLabel = isTextItem
+                    ? (item.defaults?.text?.trim() || t('editor.media.text', 'Text'))
                     : item.path.startsWith('pending:')
                       ? getPendingFile(item.path)?.name ?? item.path
                       : item.path.replace(/^media\//, '');
+                  const label = isTextItem && rawLabel.length > 20 ? rawLabel.slice(0, 20) + '…' : rawLabel;
                   const mediaType = getMediaType(item.path);
                   return (
                     <div
@@ -450,7 +455,10 @@ export function LeftSidebar() {
                         });
                         e.dataTransfer.effectAllowed = 'copy';
                       }}
-                      onClick={() => setSelectedMediaPath(item.path)}
+                      onClick={() => {
+                        clearSelection();
+                        setSelectedMediaPath(item.path);
+                      }}
                       onContextMenu={(e) => {
                         e.preventDefault();
                         setContextMenu({ x: e.clientX, y: e.clientY, path: item.path });
@@ -466,7 +474,7 @@ export function LeftSidebar() {
                         path={item.path}
                         getPendingFile={getPendingFile}
                       />
-                      <span className="text-slate-800 dark:text-white/90 text-xs truncate max-w-[120px]" title={item.path}>
+                      <span className="text-slate-800 dark:text-white/90 text-xs truncate max-w-[120px]" title={isTextItem ? (item.defaults?.text ?? item.path) : item.path}>
                         {label}
                       </span>
                     </div>

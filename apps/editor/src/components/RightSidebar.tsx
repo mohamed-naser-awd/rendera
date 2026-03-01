@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useProjectStore, getActiveTimeline } from '../stores/projectStore';
 import { useTimelineSelectionStore } from '../stores/timelineSelectionStore';
+import { useMediaSelectionStore } from '../stores/mediaSelectionStore';
 import { ItemConfigurationPanel } from './ItemConfigurationPanel';
+import { MediaItemConfigurationPanel } from './MediaItemConfigurationPanel';
 import { VideoConfigurationPanel } from './VideoConfigurationPanel';
 
 const SIDEBAR_WIDTH = 280;
@@ -13,6 +15,7 @@ export function RightSidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const { project } = useProjectStore();
   const { selectedIds } = useTimelineSelectionStore();
+  const { selectedMediaPath } = useMediaSelectionStore();
 
   const root = project?.root;
   const activeTimeline = root ? getActiveTimeline(root) : null;
@@ -22,6 +25,8 @@ export function RightSidebar() {
     start: node.startTime ?? (idx === 0 ? 0 : items.slice(0, idx).reduce((s, n) => s + n.duration, 0)),
   }));
   const selectedBlock = selectedIds.length === 1 ? blocks.find((b) => b.id === selectedIds[0]) : null;
+  const media = Array.isArray(root?.media) ? root.media : [];
+  const selectedMediaItem = selectedMediaPath ? media.find((m) => m.path === selectedMediaPath) ?? null : null;
 
   return (
     <aside
@@ -58,7 +63,9 @@ export function RightSidebar() {
               <h2 className="text-sm font-medium text-slate-700 dark:text-white/80 flex-1 min-w-0 truncate">
                 {selectedBlock
                   ? t('editor.item.configuration', 'Item configuration')
-                  : t('editor.item.videoConfiguration', 'Video configuration')}
+                  : selectedMediaItem
+                    ? t('editor.media.mediaConfiguration', 'Media configuration')
+                    : t('editor.item.videoConfiguration', 'Video configuration')}
               </h2>
             </div>
             <div className="flex-1 min-h-0 overflow-auto p-3">
@@ -67,6 +74,8 @@ export function RightSidebar() {
                   block={selectedBlock}
                   onCloseCrop={() => {}}
                 />
+              ) : selectedMediaItem ? (
+                <MediaItemConfigurationPanel mediaItem={selectedMediaItem} />
               ) : (
                 <VideoConfigurationPanel />
               )}

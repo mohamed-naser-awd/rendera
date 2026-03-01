@@ -46,6 +46,19 @@ html.dark .timeline-scroll-area::-webkit-scrollbar-thumb:hover {
 html.dark .timeline-scroll-area::-webkit-scrollbar-corner {
   background: rgb(37 37 37);
 }
+
+/* React Timeline Editor: override library's width:600px, use full container width */
+.rte-timeline-wrapper .timeline-editor {
+  width: 100% !important;
+  max-width: 100%;
+  flex: 1;
+  min-width: 0;
+  min-height: 32px;
+  background-color: rgb(37 37 37) !important;
+}
+html:not(.dark) .rte-timeline-wrapper .timeline-editor {
+  background-color: rgb(241 245 249) !important;
+}
 @supports (scrollbar-width: thin) {
   .timeline-scroll-area {
     scrollbar-width: thin;

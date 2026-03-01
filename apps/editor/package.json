@@ -9,11 +9,12 @@
     "preview": "vite preview --port 5174"
   },
   "dependencies": {
+    "@xzdarcy/react-timeline-editor": "^1.0.0",
+    "i18next": "^23.7.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "zustand": "^4.4.7",
     "react-i18next": "^14.0.0",
-    "i18next": "^23.7.0"
+    "zustand": "^4.4.7"
   },
   "devDependencies": {
     "@types/react": "^18.2.43",

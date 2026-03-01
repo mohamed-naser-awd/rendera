@@ -1,43 +1,25 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useProjectStore } from '../stores/projectStore';
 import { getActiveTimeline } from '../stores/projectStore';
 import type { TimelineNode } from '../stores/projectStore';
 import { useTimelineSelectionStore } from '../stores/timelineSelectionStore';
+import { useMediaSelectionStore } from '../stores/mediaSelectionStore';
 import { usePlaybackStore } from '../stores/playbackStore';
 import { useClipboardActions } from '../hooks/useClipboardActions';
 import { useTimelineDuration } from '../hooks/useTimelineDuration';
 import { getDragNodeData, getDragMediaData } from './NodePalette';
 import CropDialog from './CropDialog';
-const MIN_BLOCK_WIDTH_PX = 64;
-const MIN_BLOCK_DURATION_SEC = 0.5;
-/** Duration used when timeline is empty and user drags over it (expand immediately). */
-const EXPAND_ON_DRAG_DURATION_SEC = 10;
-// Reserve space so last ruler label is not clipped (start label removed)
-const RULER_PADDING_LEFT = 0;
-const RULER_PADDING_RIGHT = 28;
-/** Min horizontal spacing (px) between time labels to avoid overlap. */
-const MIN_RULER_LABEL_SPACING_PX = 56;
-/** Keep playhead at least this many px from the viewport edge when auto-scrolling. */
-const PLAYHEAD_SCROLL_MARGIN_PX = 48;
+import { RteTimeline } from './RteTimeline';
 
-/** Number of segments shown across the visible track width. Each segment = one unit of the chosen duration. */
-const SEGMENTS_VISIBLE = 5;
-/** Zoom levels: duration per segment in seconds. Viewport shows SEGMENTS_VISIBLE segments (e.g. 5 × 1min = 5 min). */
+/** Zoom levels: duration per segment in seconds. */
 const SEC = 1;
 const MIN = 60;
 const ZOOM_LEVELS_SEC: number[] = [
   1 * SEC, 5 * SEC, 10 * SEC, 15 * SEC, 30 * SEC,
-  1 * MIN, 3 * MIN, 5 * MIN, 10 * MIN,  // 1min, 3min, 5min, 10min in seconds
+  1 * MIN, 3 * MIN, 5 * MIN, 10 * MIN,
 ];
-const DEFAULT_ZOOM_INDEX = 4; // 30 seconds per segment → 5 × 30s = 2.5 min in view
-
-function formatRulerTime(sec: number) {
-  const h = Math.floor(sec / 3600);
-  const m = Math.floor((sec % 3600) / 60);
-  const s = Math.floor(sec % 60);
-  return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-}
+const DEFAULT_ZOOM_INDEX = 4;
 
 function formatSegmentLabel(sec: number): string {
   if (sec < 60) return `${sec}s`;
@@ -45,152 +27,23 @@ function formatSegmentLabel(sec: number): string {
   return `${m}m`;
 }
 
-interface TimelineBlockProps {
-  block: TimelineNode & { start: number };
-  pixelsPerSecond: number;
-  isSelected: boolean;
-  onResize: (newDuration: number) => void;
-  onMove: (newStartTime: number, trackIndex?: number) => void;
-  onSelect: (e: React.MouseEvent) => void;
-  onContextMenu: (e: React.MouseEvent) => void;
-  onMoveStart?: () => void;
-  onMoveEnd?: () => void;
-  onResizeStart?: () => void;
-  onResizeEnd?: () => void;
-}
+type BlockWithStart = TimelineNode & { start: number };
 
-function TimelineBlock({ block, pixelsPerSecond, isSelected, onResize, onMove, onSelect, onContextMenu, onMoveStart, onMoveEnd, onResizeStart, onResizeEnd }: TimelineBlockProps) {
-  const startX = useRef(0);
-  const startDuration = useRef(0);
-  const startStartTime = useRef(0);
-  const [liveDuration, setLiveDuration] = useState<number | null>(null);
-
-  const displayDuration = liveDuration ?? block.duration;
-  const displayStart = block.start;
-  const displayWidth = Math.max(MIN_BLOCK_WIDTH_PX, displayDuration * pixelsPerSecond - 4);
-  const displayLeft = RULER_PADDING_LEFT + displayStart * pixelsPerSecond;
-
-  const handleMoveStart = useCallback(
-    (e: React.PointerEvent) => {
-      if (pixelsPerSecond <= 0) return;
-      e.preventDefault();
-      e.stopPropagation();
-      onMoveStart?.();
-      const target = e.currentTarget as HTMLElement;
-      target.setPointerCapture(e.pointerId);
-      startX.current = e.clientX;
-      startStartTime.current = block.start;
-      const moveHandler = (ev: PointerEvent) => {
-        const deltaPx = ev.clientX - startX.current;
-        const deltaSec = deltaPx / pixelsPerSecond;
-        const newStart = startStartTime.current + deltaSec;
-        const trackEl = document.elementFromPoint(ev.clientX, ev.clientY)?.closest('[data-timeline-track]');
-        const trackIndex = trackEl ? parseInt(trackEl.getAttribute('data-track-index') ?? '0', 10) : undefined;
-        onMove(newStart, trackIndex);
-      };
-      const upHandler = () => {
-        try {
-          target.releasePointerCapture(e.pointerId);
-        } catch {
-          /* already released */
-        }
-        onMoveEnd?.();
-        window.removeEventListener('pointermove', moveHandler);
-        window.removeEventListener('pointerup', upHandler);
-        window.removeEventListener('pointercancel', upHandler);
-        window.removeEventListener('blur', upHandler);
-        document.removeEventListener('visibilitychange', upHandler);
-      };
-      window.addEventListener('pointermove', moveHandler);
-      window.addEventListener('pointerup', upHandler);
-      window.addEventListener('pointercancel', upHandler);
-      window.addEventListener('blur', upHandler);
-      document.addEventListener('visibilitychange', upHandler);
-    },
-    [block.start, pixelsPerSecond, onMove, onMoveStart, onMoveEnd]
-  );
-
-  const handleResizeStart = useCallback(
-    (e: React.PointerEvent) => {
-      if (pixelsPerSecond <= 0) return;
-      e.preventDefault();
-      e.stopPropagation();
-      onResizeStart?.();
-      const target = e.currentTarget as HTMLElement;
-      target.setPointerCapture(e.pointerId);
-      startX.current = e.clientX;
-      startDuration.current = block.duration;
-      setLiveDuration(block.duration);
-      const moveHandler = (ev: PointerEvent) => {
-        const deltaPx = ev.clientX - startX.current;
-        const deltaSec = deltaPx / pixelsPerSecond;
-        const newDuration = Math.max(MIN_BLOCK_DURATION_SEC, startDuration.current + deltaSec);
-        setLiveDuration(newDuration);
-      };
-      const upHandler = () => {
-        try {
-          target.releasePointerCapture(e.pointerId);
-        } catch {
-          /* already released */
-        }
-        onResizeEnd?.();
-        window.removeEventListener('pointermove', moveHandler);
-        window.removeEventListener('pointerup', upHandler);
-        window.removeEventListener('pointercancel', upHandler);
-        window.removeEventListener('blur', upHandler);
-        document.removeEventListener('visibilitychange', upHandler);
-        setLiveDuration((prev) => {
-          if (prev !== null) onResize(prev);
-          return null;
-        });
-      };
-      window.addEventListener('pointermove', moveHandler);
-      window.addEventListener('pointerup', upHandler);
-      window.addEventListener('pointercancel', upHandler);
-      window.addEventListener('blur', upHandler);
-      document.addEventListener('visibilitychange', upHandler);
-    },
-    [block.duration, pixelsPerSecond, onResize, onResizeStart, onResizeEnd]
-  );
-
-  return (
-    <div
-      data-timeline-block
-      className={`absolute top-0 bottom-0 rounded-lg flex items-center overflow-hidden group select-none transition-shadow ${
-        isSelected
-          ? 'bg-emerald-500 dark:bg-emerald-600 border-2 border-emerald-400 dark:border-emerald-500 ring-2 ring-emerald-400/50'
-          : 'bg-emerald-600 dark:bg-emerald-700 border border-emerald-500/50 hover:ring-2 hover:ring-emerald-400/50'
-      }`}
-      style={{ left: displayLeft, width: displayWidth, height: '100%' }}
-      onClick={onSelect}
-      onContextMenu={onContextMenu}
-    >
-      <div
-        className="flex-1 min-w-0 flex flex-col justify-center px-2 cursor-grab active:cursor-grabbing touch-none py-1"
-        style={{ touchAction: 'none' }}
-        onPointerDown={handleMoveStart}
-      >
-        <div className="flex items-center gap-1.5 min-w-0">
-          <span className="text-xs font-medium text-white truncate">{block.label ?? block.type}</span>
-          <span className="text-xs text-white/70 flex-shrink-0">{displayDuration.toFixed(1)}s</span>
-        </div>
-      </div>
-      <div
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize clip"
-        onPointerDown={handleResizeStart}
-        onClick={(e) => e.stopPropagation()}
-        className="w-2 flex-shrink-0 self-stretch flex items-center justify-center cursor-col-resize hover:bg-emerald-500/50 active:bg-emerald-500/70"
-      >
-        <div className="w-0.5 h-4 rounded-full bg-white/40 group-hover:bg-white/70" />
-      </div>
-    </div>
-  );
+/** Get items on the same track that overlap with this block in time. Includes the block itself. */
+function getOverlapGroup(block: BlockWithStart, blocks: BlockWithStart[]): BlockWithStart[] {
+  const track = block.trackIndex ?? 0;
+  const start = block.start;
+  const end = start + block.duration;
+  return blocks.filter((b) => {
+    if ((b.trackIndex ?? 0) !== track) return false;
+    const bEnd = b.start + b.duration;
+    return start < bEnd && b.start < end;
+  });
 }
 
 type ContextMenu = { x: number; y: number; blockId: string } | null;
 type TrackContextMenu = { x: number; y: number; trackIndex: number } | null;
+type RowContextMenu = { x: number; y: number; trackIndex: number; time: number } | null;
 
 export function TimelinePanel() {
   const { t } = useTranslation();
@@ -203,8 +56,6 @@ export function TimelinePanel() {
     renameTimeline,
     addTimelineNode,
     updateTimelineNode,
-    moveTimelineNodeWithPush,
-    moveTimelineGroupWithPush,
     removeTimelineNodes,
     recordForUndo,
     setRecordingSuspended,
@@ -218,8 +69,9 @@ export function TimelinePanel() {
   const [cropDialogBlockId, setCropDialogBlockId] = useState<string | null>(null);
   const [editingTimelineId, setEditingTimelineId] = useState<string | null>(null);
   const [editingTimelineName, setEditingTimelineName] = useState('');
-  const [dropTargetTrackIndex, setDropTargetTrackIndex] = useState(0);
+  const [dropTargetTrackIndex] = useState(0);
   const [trackContextMenu, setTrackContextMenu] = useState<TrackContextMenu>(null);
+  const [rowContextMenu, setRowContextMenu] = useState<RowContextMenu>(null);
   const [zoomLevelIndex, setZoomLevelIndex] = useState(DEFAULT_ZOOM_INDEX);
   const trackScrollRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
@@ -229,97 +81,20 @@ export function TimelinePanel() {
   const items: TimelineNode[] = activeTimeline?.items ?? [];
   const timelines = root?.timelines ?? [];
   const activeTimelineId = root?.activeTimelineId;
-  const { timelineDuration: totalDuration, maxEnd } = useTimelineDuration();
-  // When empty + dragOver: expand immediately to show drop zone; else use totalDuration
-  const effectiveDuration = items.length === 0
-    ? (dragOver ? EXPAND_ON_DRAG_DURATION_SEC : 0)
-    : totalDuration;
+  const { maxEnd } = useTimelineDuration();
   const visibleDuration = ZOOM_LEVELS_SEC[zoomLevelIndex];
-  const visibleTrackWidth = Math.max(0, containerWidth - RULER_PADDING_LEFT - RULER_PADDING_RIGHT);
-  /** Total time shown in the viewport = 5 segments of visibleDuration each. */
-  const viewportDuration = SEGMENTS_VISIBLE * visibleDuration;
-  const pixelsPerSecond = visibleTrackWidth > 0 && viewportDuration > 0 ? visibleTrackWidth / viewportDuration : 0;
-  /** Track is at least 5 segments wide; extend when timeline is longer. */
-  const minTrackWidthForFiveSegments = visibleTrackWidth;
-  const trackContentWidth = Math.max(
-    minTrackWidthForFiveSegments,
-    effectiveDuration > 0 ? effectiveDuration * pixelsPerSecond : 0
-  );
-
-  /** Convert seconds (0 = start of timeline) to pixel left position. */
-  function timeToLeft(sec: number) {
-    return RULER_PADDING_LEFT + sec * pixelsPerSecond;
-  }
-
-  /** Get playhead pixel position in content coordinates. */
-  function getPlayheadLeft() {
-    return timeToLeft(videoTime);
-  }
-
-  /** Convert pixel x (within track) to seconds. */
-  function leftToTime(left: number) {
-    if (pixelsPerSecond <= 0) return 0;
-    const localX = left - RULER_PADDING_LEFT;
-    return Math.max(0, Math.min(localX / pixelsPerSecond, maxEnd));
-  }
-
-  const playheadHandleRef = useRef<HTMLDivElement>(null);
-  const handlePlayheadPointerDown = useCallback(
-    (e: React.PointerEvent) => {
-      if (pixelsPerSecond <= 0 || effectiveDuration <= 0) return;
-      e.preventDefault();
-      e.stopPropagation();
-      const target = e.currentTarget as HTMLElement;
-      target.setPointerCapture(e.pointerId);
-      const scrollEl = trackScrollRef.current;
-      const moveHandler = (ev: PointerEvent) => {
-        if (!scrollEl) return;
-        const rect = scrollEl.getBoundingClientRect();
-        const contentX = scrollEl.scrollLeft + (ev.clientX - rect.left);
-        const sec = leftToTime(contentX);
-        setVideoTime(sec);
-      };
-      const upHandler = () => {
-        try {
-          target.releasePointerCapture(e.pointerId);
-        } catch {
-          /* already released */
-        }
-        window.removeEventListener('pointermove', moveHandler);
-        window.removeEventListener('pointerup', upHandler);
-        window.removeEventListener('pointercancel', upHandler);
-      };
-      window.addEventListener('pointermove', moveHandler);
-      window.addEventListener('pointerup', upHandler);
-      window.addEventListener('pointercancel', upHandler);
-    },
-    [pixelsPerSecond, effectiveDuration, maxEnd, setVideoTime]
-  );
 
   useEffect(() => {
     const el = scrollAreaRef.current;
     if (!el) return;
     const updateWidth = () => {
-      setContainerWidth(Math.max(0, el.clientWidth - TRACK_LABEL_WIDTH_PX));
+      setContainerWidth(Math.max(0, el.clientWidth - 48));
     };
     const ro = new ResizeObserver(updateWidth);
     ro.observe(el);
     updateWidth();
     return () => ro.disconnect();
   }, []);
-
-  useEffect(() => {
-    const scrollEl = trackScrollRef.current;
-    if (!scrollEl || pixelsPerSecond <= 0) return;
-    const playheadLeft = RULER_PADDING_LEFT + videoTime * pixelsPerSecond;
-    const viewportW = scrollEl.clientWidth;
-    const scrollLeft = scrollEl.scrollLeft;
-    if (playheadLeft < scrollLeft + PLAYHEAD_SCROLL_MARGIN_PX) {
-      scrollEl.scrollLeft = Math.max(0, playheadLeft - PLAYHEAD_SCROLL_MARGIN_PX);
-    } else if (playheadLeft > scrollLeft + viewportW - PLAYHEAD_SCROLL_MARGIN_PX) {
-      scrollEl.scrollLeft = playheadLeft - viewportW + PLAYHEAD_SCROLL_MARGIN_PX;
-    }
-  }, [videoTime, pixelsPerSecond]);
 
   useEffect(() => {
     function closeContextMenu() {
@@ -349,29 +124,19 @@ export function TimelinePanel() {
     }
   }, [trackContextMenu]);
 
-  const rulerMarks = (() => {
-    const step = visibleDuration;
-    const marks: number[] = [];
-    const maxSec = Math.max(effectiveDuration, viewportDuration);
-    for (let s = 0; s <= maxSec; s += step) marks.push(s);
-    if (marks.length > 0 && marks[marks.length - 1] < maxSec) marks.push(maxSec);
-    return marks;
-  })();
-
-  /** Ruler marks that get a time label (skip when too close to previous to avoid overlap). */
-  const rulerLabelsToShow = (() => {
-    const withPos = rulerMarks.filter((sec) => sec > 0).map((sec) => ({ sec, left: timeToLeft(sec) }));
-    let lastLeft = -Infinity;
-    return withPos
-      .filter(({ left }) => {
-        if (left - lastLeft >= MIN_RULER_LABEL_SPACING_PX) {
-          lastLeft = left;
-          return true;
-        }
-        return false;
-      })
-      .map(({ sec }) => sec);
-  })();
+  useEffect(() => {
+    function closeRowContextMenu() {
+      setRowContextMenu(null);
+    }
+    if (rowContextMenu) {
+      window.addEventListener('click', closeRowContextMenu);
+      window.addEventListener('contextmenu', closeRowContextMenu);
+      return () => {
+        window.removeEventListener('click', closeRowContextMenu);
+        window.removeEventListener('contextmenu', closeRowContextMenu);
+      };
+    }
+  }, [rowContextMenu]);
 
   function handleDragOver(e: React.DragEvent) {
     e.preventDefault();
@@ -389,16 +154,25 @@ export function TimelinePanel() {
     const trackIndex = dropTargetTrackIndex;
     const mediaData = getDragMediaData(e.dataTransfer);
     if (mediaData) {
-      const duration = mediaData.type === 'video' ? 10 : mediaData.type === 'text' ? 5 : 3;
+      const root = project?.root;
+      const mediaList = Array.isArray(root?.media) ? root.media : [];
+      const mediaItem = mediaList.find((m) => m.path === mediaData.path);
+      const d = mediaItem?.defaults;
+      const duration = d?.duration ?? (mediaData.type === 'video' ? 10 : mediaData.type === 'text' ? 5 : 3);
       addTimelineNode({
         type: mediaData.type,
         duration,
         label: mediaData.label,
         mediaPath: mediaData.path,
+        crop: d?.crop ?? undefined,
+        objectFit: d?.objectFit,
+        scale: d?.scale,
         ...(mediaData.type === 'text' && {
-          text: mediaData.label,
-          backgroundColor: '#ffffff',
-          textColor: '#000000',
+          text: d?.text ?? mediaData.label,
+          backgroundColor: d?.backgroundColor ?? '#ffffff',
+          textColor: d?.textColor ?? '#000000',
+          backgroundColorTransparent: d?.backgroundColorTransparent,
+          fontSize: d?.fontSize,
         }),
         trackIndex,
       });
@@ -422,32 +196,6 @@ export function TimelinePanel() {
   /** Track indices 0..N-1; render bottom-to-top (0 = bottom = layer 1, N-1 = top). */
   const trackIndices = Array.from({ length: trackCount }, (_, i) => i);
   const trackIndicesBottomToTop = [...trackIndices].reverse();
-  const TRACK_HEIGHT_PX = 56;
-  const TRACK_LABEL_WIDTH_PX = 48;
-
-  function handleBlockSelect(blockId: string) {
-    return (e: React.MouseEvent) => {
-      setSelection(blockId, e.shiftKey, sortedIds);
-    };
-  }
-
-  function handleBlockContextMenu(blockId: string) {
-    return (e: React.MouseEvent) => {
-      e.preventDefault();
-      if (!isSelected(blockId)) setSelection(blockId, false, sortedIds);
-      setContextMenu({ x: e.clientX, y: e.clientY, blockId });
-    };
-  }
-
-  function handleBlockMove(blockId: string) {
-    return (newStartTime: number, trackIndex?: number) => {
-      if (selectedIds.length > 1 && selectedIds.includes(blockId)) {
-        moveTimelineGroupWithPush(blockId, newStartTime, selectedIds, trackIndex);
-      } else {
-        moveTimelineNodeWithPush(blockId, newStartTime, trackIndex);
-      }
-    };
-  }
 
   function handleDeleteSelected() {
     removeTimelineNodes(selectedIds);
@@ -458,7 +206,7 @@ export function TimelinePanel() {
   return (
     <>
     <section
-      className="flex flex-col flex-shrink-0 border-t border-slate-200 dark:border-white/10 bg-white dark:bg-[#2d2d2d] min-h-[160px] max-h-[240px] pb-0.5"
+      className="flex flex-col flex-shrink-0 border-t border-slate-200 dark:border-white/10 bg-white dark:bg-[#2d2d2d] min-h-40 max-h-60 pb-0.5"
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -549,12 +297,11 @@ export function TimelinePanel() {
       </div>
       <div
         ref={scrollAreaRef}
-        className="timeline-scroll-area flex min-h-0 max-h-[208px] overflow-auto border-b border-slate-200 dark:border-white/10"
+        className="timeline-scroll-area flex flex-1 min-h-0 overflow-auto border-b border-slate-200 dark:border-white/10"
       >
-        <div className="flex flex-shrink-0 min-h-0 w-full min-w-0 max-w-full">
+        <div className="flex flex-1 min-h-0 min-w-0">
         <div
-          className="flex flex-col flex-shrink-0 border-r border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-[#252525]"
-          style={{ width: TRACK_LABEL_WIDTH_PX }}
+          className="flex flex-col flex-shrink-0 w-12 border-r border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-[#252525]"
         >
           <div className="h-7 flex-shrink-0 flex items-center justify-center border-b border-slate-200 dark:border-white/10">
             <button
@@ -570,8 +317,7 @@ export function TimelinePanel() {
           {trackIndicesBottomToTop.map((trackIdx) => (
             <div
               key={trackIdx}
-              className="flex items-center justify-center border-b border-slate-200 dark:border-white/10 text-xs text-slate-500 dark:text-white/50 font-medium cursor-context-menu hover:bg-slate-200 dark:hover:bg-[#383838]"
-              style={{ height: TRACK_HEIGHT_PX }}
+              className="flex flex-1 min-h-0 items-center justify-center border-b border-slate-200 dark:border-white/10 text-xs text-slate-500 dark:text-white/50 font-medium cursor-context-menu hover:bg-slate-200 dark:hover:bg-[#383838]"
               onContextMenu={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -582,145 +328,42 @@ export function TimelinePanel() {
             </div>
           ))}
         </div>
-        <div
-          ref={trackScrollRef}
-          className="flex-1 min-w-0 min-h-0 overflow-x-auto overflow-y-auto flex flex-col relative timeline-scroll-area"
-        >
-          <div
-            className="flex flex-col flex-shrink-0 relative"
-            style={{ width: trackContentWidth, minWidth: '100%' }}
-          >
-            {effectiveDuration > 0 ? (
-              <div
-                role="button"
-                tabIndex={0}
-                className="relative flex h-7 flex-shrink-0 items-end text-xs text-slate-500 dark:text-white/50 border-b border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-[#252525] cursor-pointer"
-                onClick={(e) => {
-                  if (pixelsPerSecond <= 0) return;
-                  const scrollEl = trackScrollRef.current;
-                  if (!scrollEl) return;
-                  const rect = scrollEl.getBoundingClientRect();
-                  const contentX = scrollEl.scrollLeft + (e.clientX - rect.left);
-                  const sec = leftToTime(contentX);
-                  setVideoTime(Math.max(0, Math.min(sec, maxEnd)));
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    (e.currentTarget as HTMLElement).click();
-                  }
-                }}
-                aria-label={t('editor.timeline.clickToSeek', 'Click to move playhead')}
-              >
-                {rulerMarks.map((sec) => (
-                  <div
-                    key={sec}
-                    className="absolute top-0 bottom-0 border-l border-slate-200 dark:border-white/10 pointer-events-none"
-                    style={{ left: timeToLeft(sec) }}
-                  />
-                ))}
-                {rulerLabelsToShow.map((sec) => (
-                  <span
-                    key={sec}
-                    className="absolute -translate-x-1/2 tabular-nums pointer-events-none"
-                    style={{ left: timeToLeft(sec), bottom: 4 }}
-                  >
-                    {formatRulerTime(sec)}
-                  </span>
-                ))}
-              </div>
-            ) : (
-              <div
-                className="h-7 flex-shrink-0 border-b border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-[#252525] cursor-pointer"
-                aria-hidden
-                onClick={(e) => {
-                  if (pixelsPerSecond <= 0) return;
-                  const scrollEl = trackScrollRef.current;
-                  if (!scrollEl) return;
-                  const rect = scrollEl.getBoundingClientRect();
-                  const contentX = scrollEl.scrollLeft + (e.clientX - rect.left);
-                  const sec = leftToTime(contentX);
-                  setVideoTime(Math.max(0, Math.min(sec, maxEnd)));
-                }}
-              />
-            )}
-            <div className="relative flex flex-col flex-shrink-0">
-              {trackIndicesBottomToTop.map((trackIdx) => (
-                <div
-                  key={trackIdx}
-                  data-timeline-track
-                  data-track-index={trackIdx}
-                  onDragOver={() => setDropTargetTrackIndex(trackIdx)}
-                  className={`relative flex-shrink-0 flex items-center border-b border-slate-200 dark:border-white/10 ${dragOver ? 'bg-emerald-500/5' : 'bg-slate-50 dark:bg-[#252525]'}`}
-                  style={{ height: TRACK_HEIGHT_PX }}
-                  onClick={(e) => {
-                    if (pixelsPerSecond <= 0) return;
-                    const target = e.target as HTMLElement;
-                    if (!target.closest('[data-timeline-block]') && !target.closest('[data-playhead]')) {
-                      clearSelection();
-                      const scrollEl = trackScrollRef.current;
-                      if (!scrollEl) return;
-                      const rect = scrollEl.getBoundingClientRect();
-                      const contentX = scrollEl.scrollLeft + (e.clientX - rect.left);
-                      const sec = leftToTime(contentX);
-                      const videoTimeAtClick = Math.max(0, Math.min(sec, maxEnd));
-                      setVideoTime(videoTimeAtClick);
-                    }
-                  }}
-                >
-                  {blocks
-                    .filter((b) => (b.trackIndex ?? 0) === trackIdx)
-                    .map((block) => (
-                      <TimelineBlock
-                        key={block.id}
-                        block={block}
-                        pixelsPerSecond={pixelsPerSecond}
-                        isSelected={isSelected(block.id)}
-                        onResize={(newDuration) => updateTimelineNode(block.id, { duration: newDuration })}
-                        onMove={handleBlockMove(block.id)}
-                        onSelect={handleBlockSelect(block.id)}
-                        onContextMenu={handleBlockContextMenu(block.id)}
-                        onMoveStart={() => {
-                          recordForUndo();
-                          setRecordingSuspended(true);
-                        }}
-                        onMoveEnd={() => setRecordingSuspended(false)}
-                        onResizeStart={() => {
-                          recordForUndo();
-                          setRecordingSuspended(true);
-                        }}
-                        onResizeEnd={() => setRecordingSuspended(false)}
-                      />
-                    ))}
-                </div>
-              ))}
-              {items.length === 0 && trackCount <= 1 && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <p className={`text-sm ${dragOver ? 'text-emerald-600 dark:text-emerald-400 font-medium' : 'text-slate-500 dark:text-white/50'}`}>
-                    {t('editor.timeline.dropMedia', 'Drag and drop media here')}
-                  </p>
-                </div>
-              )}
+        <div ref={trackScrollRef} className="flex-1 min-w-0 min-h-0 overflow-hidden flex flex-col relative timeline-scroll-area basis-0">
+          <RteTimeline
+            items={items}
+            trackCount={trackCount}
+            videoTime={videoTime}
+            onVideoTimeChange={setVideoTime}
+            onItemsChange={(updates) => {
+              for (const u of updates) {
+                updateTimelineNode(u.id, { startTime: u.startTime, duration: u.duration, trackIndex: u.trackIndex });
+              }
+            }}
+            selectedIds={selectedIds}
+            onSelect={(actionId, addToSelection) => {
+                useMediaSelectionStore.getState().setSelectedMediaPath(null);
+                setSelection(actionId, addToSelection, sortedIds);
+              }}
+            onContextMenu={(actionId, e) => {
+              if (!isSelected(actionId)) setSelection(actionId, false, sortedIds);
+              setContextMenu({ x: e.clientX, y: e.clientY, blockId: actionId });
+            }}
+            onContextMenuRow={(trackIndex, time, e) => {
+              setRowContextMenu({ x: e.clientX, y: e.clientY, trackIndex, time });
+            }}
+            zoomLevelIndex={zoomLevelIndex}
+            recordForUndo={recordForUndo}
+            setRecordingSuspended={setRecordingSuspended}
+            maxEnd={maxEnd}
+            containerWidth={Math.max(0, containerWidth - 48)}
+          />
+          {items.length === 0 && trackCount <= 1 && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <p className={`text-sm ${dragOver ? 'text-emerald-600 dark:text-emerald-400 font-medium' : 'text-slate-500 dark:text-white/50'}`}>
+                {t('editor.timeline.dropMedia', 'Drag and drop media here')}
+              </p>
             </div>
-              {pixelsPerSecond > 0 && (
-                <div
-                  data-playhead
-                  ref={playheadHandleRef}
-                  role="slider"
-                  aria-label="Timeline playhead"
-                  aria-valuemin={0}
-                  aria-valuemax={maxEnd}
-                  aria-valuenow={videoTime}
-                  className="absolute top-0 bottom-0 z-10 flex flex-col items-center cursor-ew-resize"
-                  style={{ left: getPlayheadLeft(), transform: 'translateX(-50%)', width: 12, touchAction: 'none' }}
-                  onClick={(e) => e.stopPropagation()}
-                  onPointerDown={handlePlayheadPointerDown}
-                >
-                  <div className="w-3 h-2.5 flex-shrink-0 bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-400 clip-path-[polygon(50%_0,100%_100%,0_100%)] pointer-events-none" />
-                  <div className="flex-1 w-0.5 bg-emerald-500 min-h-0 pointer-events-none" />
-                </div>
-              )}
-          </div>
+          )}
         </div>
         </div>
       </div>
@@ -728,7 +371,7 @@ export function TimelinePanel() {
     {contextMenu && (
       <div
         className="fixed z-50 min-w-[160px] py-1 rounded-lg shadow-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-[#2d2d2d]"
-        style={{ left: contextMenu.x, top: contextMenu.y }}
+        style={{ left: contextMenu.x, bottom: window.innerHeight - contextMenu.y }}
       >
         <button
           type="button"
@@ -764,6 +407,59 @@ export function TimelinePanel() {
           {t('editor.timeline.paste', 'Paste')}
         </button>
         <div className="my-1 border-t border-slate-200 dark:border-white/10" />
+        {(() => {
+          const ctxBlock = blocks.find((b) => b.id === contextMenu.blockId) as BlockWithStart | undefined;
+          const overlapGroup = ctxBlock ? getOverlapGroup(ctxBlock, blocks) : [];
+          const canChangeStack = overlapGroup.length >= 2;
+          const currentStack = ctxBlock?.stackIndex ?? 1;
+          const maxInGroup = overlapGroup.length ? Math.max(...overlapGroup.map((b) => b.stackIndex ?? 1)) : 1;
+          const minInGroup = overlapGroup.length ? Math.min(...overlapGroup.map((b) => b.stackIndex ?? 1)) : 1;
+          const countAtMax = overlapGroup.filter((b) => (b.stackIndex ?? 1) === maxInGroup).length;
+          const countAtMin = overlapGroup.filter((b) => (b.stackIndex ?? 1) === minInGroup).length;
+          const isAtTop = currentStack === maxInGroup && countAtMax === 1;
+          const isAtBottom = currentStack === minInGroup && countAtMin === 1;
+          return (
+            <>
+              <button
+                type="button"
+                className="w-full px-3 py-2 text-left text-sm text-slate-700 dark:text-white/90 hover:bg-slate-100 dark:hover:bg-[#383838] flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!canChangeStack || isAtTop}
+                onClick={() => {
+                  if (canChangeStack && !isAtTop) {
+                    recordForUndo?.();
+                    updateTimelineNode(contextMenu.blockId, { stackIndex: maxInGroup + 1 });
+                  }
+                  setContextMenu(null);
+                }}
+                title={!canChangeStack ? t('editor.timeline.bringToTopDisabled', 'No overlapping items on same track') : undefined}
+              >
+                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                </svg>
+                {t('editor.timeline.bringToTop', 'Bring to top')}
+              </button>
+              <button
+                type="button"
+                className="w-full px-3 py-2 text-left text-sm text-slate-700 dark:text-white/90 hover:bg-slate-100 dark:hover:bg-[#383838] flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!canChangeStack || isAtBottom}
+                onClick={() => {
+                  if (canChangeStack && !isAtBottom) {
+                    recordForUndo?.();
+                    updateTimelineNode(contextMenu.blockId, { stackIndex: 1 });
+                  }
+                  setContextMenu(null);
+                }}
+                title={!canChangeStack ? t('editor.timeline.moveToBottomDisabled', 'No overlapping items on same track') : undefined}
+              >
+                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+                {t('editor.timeline.moveToBottom', 'Move to bottom')}
+              </button>
+              <div className="my-1 border-t border-slate-200 dark:border-white/10" />
+            </>
+          );
+        })()}
         <button
           type="button"
           className="w-full px-3 py-2 text-left text-sm text-slate-700 dark:text-white/90 hover:bg-slate-100 dark:hover:bg-[#383838] flex items-center gap-2"
@@ -802,7 +498,7 @@ export function TimelinePanel() {
     {trackContextMenu !== null && (
       <div
         className="fixed z-50 min-w-[160px] py-1 rounded-lg shadow-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-[#2d2d2d]"
-        style={{ left: trackContextMenu.x, top: trackContextMenu.y }}
+        style={{ left: trackContextMenu.x, bottom: window.innerHeight - trackContextMenu.y }}
       >
         <button
           type="button"
@@ -824,6 +520,41 @@ export function TimelinePanel() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4m1 4h.01M12 4h.01M17 4v.01M7 4v.01" />
           </svg>
           {t('editor.timeline.deleteTrack', 'Delete track')}
+        </button>
+      </div>
+    )}
+    {rowContextMenu !== null && (
+      <div
+        className="fixed z-50 min-w-[160px] py-1 rounded-lg shadow-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-[#2d2d2d]"
+        style={{ left: rowContextMenu.x, bottom: window.innerHeight - rowContextMenu.y }}
+      >
+        <button
+          type="button"
+          className="w-full px-3 py-2 text-left text-sm text-slate-700 dark:text-white/90 hover:bg-slate-100 dark:hover:bg-[#383838] flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          disabled={!canPaste}
+          onClick={() => {
+            paste();
+            setVideoTime(rowContextMenu.time);
+            setRowContextMenu(null);
+          }}
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+          </svg>
+          {t('editor.timeline.paste', 'Paste')}
+        </button>
+        <button
+          type="button"
+          className="w-full px-3 py-2 text-left text-sm text-slate-700 dark:text-white/90 hover:bg-slate-100 dark:hover:bg-[#383838] flex items-center gap-2"
+          onClick={() => {
+            setVideoTime(rowContextMenu.time);
+            setRowContextMenu(null);
+          }}
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          {t('editor.timeline.seekToTime', 'Seek playhead here')}
         </button>
       </div>
     )}

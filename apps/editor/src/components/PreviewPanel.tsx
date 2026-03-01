@@ -238,10 +238,18 @@ function PreviewContent({
     ...node,
     start: node.startTime ?? (idx === 0 ? 0 : items.slice(0, idx).reduce((s, n) => s + n.duration, 0)),
   }));
-  /** All blocks active at current time, sorted by track (0 = bottom, higher = on top). */
+  /** All blocks active at current time. Sort: trackIndex (0=bottom), then stackIndex (1=bottom, higher=on top), then stable by id. */
   const activeLayers = blocks
     .filter((b) => videoTime >= b.start && videoTime < b.start + b.duration)
-    .sort((a, b) => (a.trackIndex ?? 0) - (b.trackIndex ?? 0));
+    .sort((a, b) => {
+      const trackA = a.trackIndex ?? 0;
+      const trackB = b.trackIndex ?? 0;
+      if (trackA !== trackB) return trackA - trackB;
+      const stackA = a.stackIndex ?? 1;
+      const stackB = b.stackIndex ?? 1;
+      if (stackA !== stackB) return stackA - stackB;
+      return a.id.localeCompare(b.id);
+    });
 
   return (
     <>

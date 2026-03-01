@@ -38,10 +38,28 @@ export interface TimelineNode {
   textColor?: string;
   /** Font size for type 'text' in px. When undefined, text sizes to fit content. */
   fontSize?: number;
+  /** Stack order within overlapping items (1 = bottom, higher = on top). Used when items on same track overlap in time. */
+  stackIndex?: number;
+}
+
+/** Optional default config for a media item; used when adding to timeline and in media panel. */
+export interface MediaItemDefaults {
+  duration?: number;
+  crop?: CropRect | null;
+  objectFit?: ObjectFit;
+  scale?: number;
+  /** For text media. */
+  text?: string;
+  backgroundColor?: string;
+  backgroundColorTransparent?: boolean;
+  textColor?: string;
+  fontSize?: number;
 }
 
 export interface MediaItem {
   path: string;
+  /** Defaults applied when adding this media to the timeline; also editable in media panel. */
+  defaults?: MediaItemDefaults;
 }
 
 export interface Timeline {
@@ -107,6 +125,7 @@ interface ProjectState {
     duration?: number;
     startTime?: number;
     trackIndex?: number;
+    stackIndex?: number;
     crop?: CropRect | null;
     objectFit?: ObjectFit;
     scale?: number;
@@ -124,6 +143,7 @@ interface ProjectState {
   insertTimelineNodes: (nodes: { node: Omit<TimelineNode, 'id'>; startOffset: number }[], baseTime: number) => void;
   addMedia: (file: File) => void;
   addTextMedia: () => string | null;
+  updateMediaItem: (path: string, updates: Partial<MediaItem>) => void;
   saveProject: () => Promise<void>;
   getPendingFile: (tempPath: string) => File | undefined;
 }
@@ -374,6 +394,7 @@ export const useProjectStore = create<ProjectState>((set, get) => {
     duration?: number;
     startTime?: number;
     trackIndex?: number;
+    stackIndex?: number;
     crop?: CropRect | null;
     objectFit?: ObjectFit;
     scale?: number;
@@ -396,6 +417,7 @@ export const useProjectStore = create<ProjectState>((set, get) => {
     if (updates.duration !== undefined) next.duration = updates.duration;
     if (updates.startTime !== undefined) next.startTime = Math.max(0, updates.startTime);
     if (updates.trackIndex !== undefined) next.trackIndex = Math.max(0, updates.trackIndex);
+    if (updates.stackIndex !== undefined) next.stackIndex = Math.max(1, updates.stackIndex);
     if (updates.crop !== undefined) next.crop = updates.crop ?? undefined;
     if (updates.objectFit !== undefined) next.objectFit = updates.objectFit;
     if (updates.scale !== undefined) next.scale = Math.max(0.1, Math.min(3, updates.scale));
@@ -711,6 +733,17 @@ export const useProjectStore = create<ProjectState>((set, get) => {
   },
   getPendingFile: (tempPath: string) => {
     return get().pendingMedia.find((p) => p.tempPath === tempPath)?.file;
+  },
+  updateMediaItem: (path: string, updates: Partial<MediaItem>) => {
+    const { project } = get();
+    if (!project) return;
+    recordForUndo();
+    const media = Array.isArray(project.root?.media) ? [...project.root.media] : [];
+    const idx = media.findIndex((m) => m.path === path);
+    if (idx < 0) return;
+    const next = [...media];
+    next[idx] = { ...next[idx], ...updates };
+    applyLocalUpdate({ root: { ...project.root, media: next } });
   },
   saveProject: async () => {
     const { project, pendingMedia: pending, loadProject } = get();
