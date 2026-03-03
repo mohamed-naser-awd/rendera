@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useProjectStore, getActiveTimeline } from '../stores/projectStore';
-import { useTimelineSelectionStore } from '../stores/timelineSelectionStore';
-import { useMediaSelectionStore } from '../stores/mediaSelectionStore';
+import { useProjectStore, getActiveTimeline } from '@/stores/projectStore';
+import { useTimelineSelectionStore } from '@/stores/timelineSelectionStore';
+import { useMediaSelectionStore } from '@/stores/mediaSelectionStore';
 import { ItemConfigurationPanel } from './ItemConfigurationPanel';
 import { MediaItemConfigurationPanel } from './MediaItemConfigurationPanel';
 import { VideoConfigurationPanel } from './VideoConfigurationPanel';

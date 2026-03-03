@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
-import { usePlaybackStore } from '../stores/playbackStore';
-import { useTimelineDuration } from '../hooks/useTimelineDuration';
+import { usePlaybackStore } from '@/stores/playbackStore';
+import { useTimelineDuration } from '@/hooks/useTimelineDuration';
 
 export function PlaybackControls() {
   const { videoTime, playing, setVideoTime, setPlaying } = usePlaybackStore();

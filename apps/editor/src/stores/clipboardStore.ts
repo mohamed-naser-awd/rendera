@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { TimelineNode } from './projectStore';
+import type { TimelineNode } from '@/stores/projectStore';
 
 export interface ClipboardNode {
   /** Node data without id; startOffset is relative to the first copied node. */

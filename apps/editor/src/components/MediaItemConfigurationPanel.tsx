@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useProjectStore } from '../stores/projectStore';
-import type { MediaItem, CropRect, ObjectFit } from '../stores/projectStore';
+import { useProjectStore } from '@/stores/projectStore';
+import type { MediaItem, CropRect, ObjectFit } from '@/stores/projectStore';
 import CropDialog from './CropDialog';
 
 const OBJECT_FIT_OPTIONS: { value: ObjectFit; labelKey: string }[] = [

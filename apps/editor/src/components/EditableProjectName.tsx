@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { useProjectStore } from '../stores/projectStore';
+import { useProjectStore } from '@/stores/projectStore';
 
 export function EditableProjectName() {
   const { project, updateProject } = useProjectStore();

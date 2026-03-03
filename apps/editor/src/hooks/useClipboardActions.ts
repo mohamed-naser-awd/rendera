@@ -1,8 +1,8 @@
 import { useCallback } from 'react';
-import { useProjectStore, getActiveTimeline } from '../stores/projectStore';
-import { useTimelineSelectionStore } from '../stores/timelineSelectionStore';
-import { useClipboardStore, type ClipboardNode } from '../stores/clipboardStore';
-import { usePlaybackStore } from '../stores/playbackStore';
+import { useProjectStore, getActiveTimeline } from '@/stores/projectStore';
+import { useTimelineSelectionStore } from '@/stores/timelineSelectionStore';
+import { useClipboardStore, type ClipboardNode } from '@/stores/clipboardStore';
+import { usePlaybackStore } from '@/stores/playbackStore';
 
 export function useClipboardActions() {
   const { project, removeTimelineNodes, insertTimelineNodes } = useProjectStore();

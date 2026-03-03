@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Timeline } from '@xzdarcy/react-timeline-editor';
 import type { TimelineRow, TimelineAction, TimelineEffect } from '@xzdarcy/timeline-engine';
-import type { TimelineNode } from '../stores/projectStore';
+import type { TimelineNode } from '@/stores/projectStore';
 import '@xzdarcy/react-timeline-editor/dist/react-timeline-editor.css';
 
 /** Zoom levels: duration per scale segment in seconds. */
@@ -342,8 +342,13 @@ export function RteTimeline({
           const effect = effects[action.effectId];
           const name = effect?.name ?? action.id;
           const duration = action.end - action.start;
-          const stackIndex = items.find((n) => n.id === action.id)?.stackIndex ?? 1;
+          const node = items.find((n) => n.id === action.id);
+          const stackIndex = node?.stackIndex ?? 1;
+          const transitionOut = node?.transitionOut;
           const isSelected = (action as { selected?: boolean }).selected ?? selectedIds.includes(action.id);
+          const transitionDuration = transitionOut?.duration ?? 0.5;
+          const pixelsPerSecond = scaleWidth / scale;
+          const transitionWidthPx = Math.max(6, transitionDuration * pixelsPerSecond);
           return (
             <div
               className={`flex items-center justify-between px-2 h-full rounded overflow-hidden bg-emerald-600 dark:bg-emerald-700 text-white text-xs border-2 ${
@@ -355,6 +360,13 @@ export function RteTimeline({
             >
               <span className="truncate flex-1 min-w-0">{name}</span>
               <span className="flex-shrink-0 ml-1 opacity-80">{duration.toFixed(1)}s</span>
+              {transitionOut && (
+                <div
+                  className="absolute right-0 top-0 bottom-0 rounded-r bg-teal-500 dark:bg-teal-400 shrink-0"
+                  style={{ width: transitionWidthPx }}
+                  title={`Transition: ${transitionOut.type} (${transitionDuration}s)`}
+                />
+              )}
             </div>
           );
         }}

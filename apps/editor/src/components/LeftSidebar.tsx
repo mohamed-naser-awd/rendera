@@ -1,14 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useProjectStore } from '../stores/projectStore';
-import type { MediaItem } from '../stores/projectStore';
-import { usePlaybackStore } from '../stores/playbackStore';
-import { useMediaSelectionStore } from '../stores/mediaSelectionStore';
-import { useTimelineSelectionStore } from '../stores/timelineSelectionStore';
-import { getApiBaseUrl } from '../../../../shared/getApiUrl';
+import { useProjectStore } from '@/stores/projectStore';
+import type { MediaItem } from '@/stores/projectStore';
+import { TransitionsTab } from './TransitionsTab';
+import { TransformTab } from './TransformTab';
+import { usePlaybackStore } from '@/stores/playbackStore';
+import { useMediaSelectionStore } from '@/stores/mediaSelectionStore';
+import { useTimelineSelectionStore } from '@/stores/timelineSelectionStore';
+import { getApiBaseUrl } from '@shared/getApiUrl';
 import { setDragMediaData } from './NodePalette';
+import {
+  transformNoiseCancellation,
+  transformNanoBanana,
+  transformExtractTranscript,
+  transformVoiceOver,
+  transformRecordVoice,
+} from '@/lib/transformApi';
 
-const TAB_IDS = ['media', 'annotations', 'transitions', 'behaviors', 'animations', 'effects'] as const;
+const TAB_IDS = ['media', 'annotations', 'transitions', 'transform', 'behaviors', 'animations', 'effects'] as const;
 const SIDEBAR_MIN = 180;
 const SIDEBAR_MAX = 420;
 const SIDEBAR_DEFAULT = 256;
@@ -128,7 +137,7 @@ function MediaItemWithPreview({
 export function LeftSidebar() {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<(typeof TAB_IDS)[number]>('media');
-  const { project, addMedia, addTextMedia, addTimelineNode, getPendingFile } = useProjectStore();
+  const { project, addMedia, addMediaPath, addTextMedia, addTimelineNode, getPendingFile } = useProjectStore();
   const { videoTime } = usePlaybackStore();
   const [dragOver, setDragOver] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -137,13 +146,65 @@ export function LeftSidebar() {
   const { clearSelection } = useTimelineSelectionStore();
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; path: string } | null>(null);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const [transformBusy, setTransformBusy] = useState<string | null>(null);
+  const [transformSubmenuOpen, setTransformSubmenuOpen] = useState(false);
+  const transformSubmenuTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const addMenuRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
+  const recordVoiceInputRef = useRef<HTMLInputElement>(null);
+  const pendingRecordMediaPathRef = useRef<string | null>(null);
   const resizeStartX = useRef<number>(0);
   const resizeStartWidth = useRef<number>(0);
 
   const media: MediaItem[] = Array.isArray(project?.root?.media) ? project.root.media : [];
+
+  async function runTransformFromMedia(
+    path: string,
+    kind: 'noise' | 'nano' | 'transcript' | 'voiceover' | 'record',
+    extra?: { text?: string; file?: File }
+  ) {
+    if (!project || path.startsWith('pending:') || path.startsWith('text:')) return;
+    setContextMenu(null);
+    const source = { media_path: path };
+    setTransformBusy(kind);
+    try {
+      if (kind === 'noise') {
+        const r = await transformNoiseCancellation(project.id, source);
+        addMediaPath(r.path);
+        addTimelineNode(
+          { type: 'video', duration: 5, label: 'Noise cancelled', mediaPath: r.path },
+          { startTime: videoTime, trackIndex: 0 }
+        );
+      } else if (kind === 'nano') {
+        const r = await transformNanoBanana(project.id, source, extra?.text ?? undefined);
+        addMediaPath(r.path);
+        addTimelineNode(
+          { type: 'image', duration: 5, label: 'Nano Banana', mediaPath: r.path },
+          { startTime: videoTime, trackIndex: 0 }
+        );
+      } else if (kind === 'transcript') {
+        const r = await transformExtractTranscript(project.id, source);
+        addMediaPath(r.path);
+      } else if (kind === 'voiceover' && extra?.text) {
+        const r = await transformVoiceOver(project.id, extra.text, undefined);
+        addMediaPath(r.path);
+        addTimelineNode(
+          { type: 'video', duration: 5, label: 'Voice over', mediaPath: r.path },
+          { startTime: videoTime, trackIndex: 0 }
+        );
+      } else if (kind === 'record' && extra?.file) {
+        const r = await transformRecordVoice(project.id, extra.file, undefined, videoTime);
+        addMediaPath(r.path);
+        addTimelineNode(
+          { type: 'video', duration: 5, label: 'Recorded voice', mediaPath: r.path },
+          { startTime: r.start_time ?? videoTime, trackIndex: 0 }
+        );
+      }
+    } finally {
+      setTransformBusy(null);
+    }
+  }
 
   const handleResizeStart = useCallback((e: React.PointerEvent) => {
     e.preventDefault();
@@ -180,6 +241,7 @@ export function LeftSidebar() {
   useEffect(() => {
     function closeContextMenu() {
       setContextMenu(null);
+      setTransformSubmenuOpen(false);
     }
     if (contextMenu) {
       window.addEventListener('click', closeContextMenu);
@@ -249,6 +311,7 @@ export function LeftSidebar() {
     media: t('editor.tabs.media', 'Media'),
     annotations: t('editor.tabs.annotations', 'Annotations'),
     transitions: t('editor.tabs.transitions', 'Transitions'),
+    transform: t('editor.tabs.transform', 'Transform'),
     behaviors: t('editor.tabs.behaviors', 'Behaviors'),
     animations: t('editor.tabs.animations', 'Animations'),
     effects: t('editor.tabs.effects', 'Effects'),
@@ -311,6 +374,11 @@ export function LeftSidebar() {
             {id === 'animations' && (
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+              </svg>
+            )}
+            {id === 'transform' && (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
             )}
             {id === 'effects' && (
@@ -482,6 +550,10 @@ export function LeftSidebar() {
                 })
               )}
             </div>
+          ) : activeTab === 'transitions' ? (
+            <TransitionsTab />
+          ) : activeTab === 'transform' ? (
+            <TransformTab />
           ) : (
             <p className="text-slate-500 dark:text-white/50 text-sm py-4">{tabLabels[activeTab]} — coming soon</p>
           )}
@@ -536,8 +608,111 @@ export function LeftSidebar() {
           </svg>
           {t('editor.media.properties', 'Properties')}
         </button>
+        <div className="my-1 border-t border-slate-200 dark:border-white/10" />
+        <div
+          className="relative"
+          onMouseEnter={() => {
+            if (transformSubmenuTimerRef.current) {
+              clearTimeout(transformSubmenuTimerRef.current);
+              transformSubmenuTimerRef.current = null;
+            }
+            setTransformSubmenuOpen(true);
+          }}
+          onMouseLeave={() => {
+            transformSubmenuTimerRef.current = setTimeout(() => setTransformSubmenuOpen(false), 150);
+          }}
+        >
+          <div className="w-full px-3 py-2 text-left text-sm text-slate-700 dark:text-white/90 hover:bg-slate-100 dark:hover:bg-[#383838] flex items-center justify-between gap-2 cursor-default">
+            <span>{t('editor.tabs.transform', 'Transform')}</span>
+            <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </div>
+          {transformSubmenuOpen && (
+            <div
+              className="absolute left-full top-0 ml-0.5 min-w-[180px] py-1 rounded-lg shadow-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-[#2d2d2d] z-[60]"
+              onMouseEnter={() => {
+                if (transformSubmenuTimerRef.current) {
+                  clearTimeout(transformSubmenuTimerRef.current);
+                  transformSubmenuTimerRef.current = null;
+                }
+              }}
+              onMouseLeave={() => {
+                transformSubmenuTimerRef.current = setTimeout(() => setTransformSubmenuOpen(false), 150);
+              }}
+            >
+              <button
+                type="button"
+                className="w-full px-3 py-2 text-left text-sm text-slate-700 dark:text-white/90 hover:bg-slate-100 dark:hover:bg-[#383838] flex items-center gap-2 disabled:opacity-50"
+                disabled={!!transformBusy || contextMenu.path.startsWith('pending:') || contextMenu.path.startsWith('text:')}
+                onClick={() => runTransformFromMedia(contextMenu.path, 'noise')}
+              >
+                {t('editor.transform.noiseCancellation', 'Noise Cancellation')}
+              </button>
+              <button
+                type="button"
+                className="w-full px-3 py-2 text-left text-sm text-slate-700 dark:text-white/90 hover:bg-slate-100 dark:hover:bg-[#383838] flex items-center gap-2 disabled:opacity-50"
+                disabled={!!transformBusy || contextMenu.path.startsWith('pending:') || contextMenu.path.startsWith('text:')}
+                onClick={() => {
+                  const text = window.prompt(t('editor.transform.promptPlaceholder', 'Describe edit or leave empty'));
+                  runTransformFromMedia(contextMenu.path, 'nano', { text: text ?? undefined });
+                }}
+              >
+                {t('editor.transform.nanoBanana', 'Nano Banana')}
+              </button>
+              <button
+                type="button"
+                className="w-full px-3 py-2 text-left text-sm text-slate-700 dark:text-white/90 hover:bg-slate-100 dark:hover:bg-[#383838] flex items-center gap-2 disabled:opacity-50"
+                disabled={!!transformBusy || contextMenu.path.startsWith('pending:') || contextMenu.path.startsWith('text:')}
+                onClick={() => runTransformFromMedia(contextMenu.path, 'transcript')}
+              >
+                {t('editor.transform.extractTranscript', 'Extract Transcript')}
+              </button>
+              <button
+                type="button"
+                className="w-full px-3 py-2 text-left text-sm text-slate-700 dark:text-white/90 hover:bg-slate-100 dark:hover:bg-[#383838] flex items-center gap-2 disabled:opacity-50"
+                disabled={!!transformBusy}
+                onClick={() => {
+                  const text = window.prompt(t('editor.transform.voiceOverPlaceholder', 'Type text to generate speech'));
+                  if (text?.trim()) runTransformFromMedia(contextMenu.path, 'voiceover', { text: text.trim() });
+                }}
+              >
+                {t('editor.transform.voiceOver', 'Voice Over')}
+              </button>
+              <button
+                type="button"
+                className="w-full px-3 py-2 text-left text-sm text-slate-700 dark:text-white/90 hover:bg-slate-100 dark:hover:bg-[#383838] flex items-center gap-2 disabled:opacity-50"
+                disabled={!!transformBusy}
+                onClick={() => {
+                  if (contextMenu) {
+                    pendingRecordMediaPathRef.current = contextMenu.path;
+                    setContextMenu(null);
+                    recordVoiceInputRef.current?.click();
+                  }
+                }}
+              >
+                {t('editor.transform.recordVoice', 'Record Voice')}
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     )}
+    <input
+      ref={recordVoiceInputRef}
+      type="file"
+      accept="audio/*,video/webm"
+      className="hidden"
+      onChange={(e) => {
+        const file = e.target.files?.[0];
+        const path = pendingRecordMediaPathRef.current;
+        if (file && path && project && !path.startsWith('pending:')) {
+          pendingRecordMediaPathRef.current = null;
+          runTransformFromMedia(path, 'record', { file });
+        }
+        e.target.value = '';
+      }}
+    />
     </>
   );
 }

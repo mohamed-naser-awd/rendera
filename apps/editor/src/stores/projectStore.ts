@@ -1,7 +1,8 @@
 import { create } from 'zustand';
-import { getApiBaseUrl } from '../../../../shared/getApiUrl';
-import { usePlaybackStore } from '../stores/playbackStore';
-import { useTimelineSelectionStore } from '../stores/timelineSelectionStore';
+import { getApiBaseUrl } from '@shared/getApiUrl';
+import { usePlaybackStore } from '@/stores/playbackStore';
+import { useTimelineSelectionStore } from '@/stores/timelineSelectionStore';
+import type { AppliedTransition } from '@/lib/transitions';
 
 export interface CropRect {
   top: number;
@@ -40,6 +41,8 @@ export interface TimelineNode {
   fontSize?: number;
   /** Stack order within overlapping items (1 = bottom, higher = on top). Used when items on same track overlap in time. */
   stackIndex?: number;
+  /** Transition applied when this clip ends into the next. Stored in project, passed to backend on save. */
+  transitionOut?: AppliedTransition;
 }
 
 /** Optional default config for a media item; used when adding to timeline and in media panel. */
@@ -97,6 +100,26 @@ const MAX_UNDO_STEPS = 50;
 /** When true, applyLocalUpdate does not push to undo stack (used during drag/resize). */
 let recordingSuspended = false;
 
+let tempSaveTimer: ReturnType<typeof setTimeout> | null = null;
+const TEMP_SAVE_DEBOUNCE_MS = 800;
+
+function schedulePutProjectTemp(projectId: string, root: ProjectRoot) {
+  if (tempSaveTimer) clearTimeout(tempSaveTimer);
+  tempSaveTimer = setTimeout(async () => {
+    tempSaveTimer = null;
+    try {
+      const baseUrl = await getApiBaseUrl();
+      await fetch(`${baseUrl}/api/projects/${projectId}/temp`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ root }),
+      });
+    } catch {
+      /* ignore */
+    }
+  }, TEMP_SAVE_DEBOUNCE_MS);
+}
+
 interface ProjectState {
   project: Project | null;
   isDirty: boolean;
@@ -104,6 +127,8 @@ interface ProjectState {
   undoStack: ProjectRoot[];
   redoStack: ProjectRoot[];
   loadProject: (id: string) => Promise<void>;
+  /** Discard temporary draft and reload project from server (cancel/revert). */
+  discardProjectTemp: (id: string) => Promise<void>;
   createProject: () => Promise<void>;
   undo: () => void;
   redo: () => void;
@@ -134,6 +159,7 @@ interface ProjectState {
     backgroundColorTransparent?: boolean;
     textColor?: string;
     fontSize?: number;
+    transitionOut?: AppliedTransition;
   }) => void;
   /** Update a child node inside a stack (e.g. crop, objectFit, scale on the media layer). */
   updateStackChild: (stackNodeId: string, childId: string, updates: { crop?: CropRect | null; objectFit?: ObjectFit; scale?: number }) => void;
@@ -142,6 +168,8 @@ interface ProjectState {
   removeTimelineNodes: (nodeIds: string[]) => void;
   insertTimelineNodes: (nodes: { node: Omit<TimelineNode, 'id'>; startOffset: number }[], baseTime: number) => void;
   addMedia: (file: File) => void;
+  /** Add a media item that already exists on the server (e.g. from transform). */
+  addMediaPath: (path: string) => void;
   addTextMedia: () => string | null;
   updateMediaItem: (path: string, updates: Partial<MediaItem>) => void;
   saveProject: () => Promise<void>;
@@ -208,6 +236,10 @@ export const useProjectStore = create<ProjectState>((set, get) => {
           }
         : s
     );
+    const next = get();
+    if (next.project?.root) {
+      schedulePutProjectTemp(next.project.id, next.project.root);
+    }
   }
 
   return {
@@ -252,14 +284,38 @@ export const useProjectStore = create<ProjectState>((set, get) => {
   },
   loadProject: async (id: string) => {
     const baseUrl = await getApiBaseUrl();
-    const res = await fetch(`${baseUrl}/api/projects/${id}`);
-    if (!res.ok) return;
-    const project = await res.json();
-    if (project.root) {
-      project.root = ensureTimelines(project.root);
+    const tempRes = await fetch(`${baseUrl}/api/projects/${id}/temp`);
+    let project: Project;
+    if (tempRes.ok) {
+      const { root } = (await tempRes.json()) as { root: ProjectRoot };
+      const fullRes = await fetch(`${baseUrl}/api/projects/${id}`);
+      if (!fullRes.ok) return;
+      project = await fullRes.json();
+      project.root = ensureTimelines(root);
+      project.name = project.name ?? 'Project';
+    } else {
+      const res = await fetch(`${baseUrl}/api/projects/${id}`);
+      if (!res.ok) return;
+      project = await res.json();
+      if (project.root) {
+        project.root = ensureTimelines(project.root);
+      }
     }
     usePlaybackStore.getState().resetMaxTimelineDuration();
-    set({ project, isDirty: false, pendingMedia: [], undoStack: [], redoStack: [] });
+    set({ project, isDirty: !tempRes.ok, pendingMedia: [], undoStack: [], redoStack: [] });
+  },
+  discardProjectTemp: async (projectId: string) => {
+    const baseUrl = await getApiBaseUrl();
+    await fetch(`${baseUrl}/api/projects/${projectId}/temp`, { method: 'DELETE' });
+    const getState = get();
+    if (getState.project?.id === projectId) {
+      const res = await fetch(`${baseUrl}/api/projects/${projectId}`);
+      if (!res.ok) return;
+      const project = await res.json();
+      if (project.root) project.root = ensureTimelines(project.root);
+      set({ project, isDirty: false, pendingMedia: [], undoStack: [], redoStack: [] });
+      usePlaybackStore.getState().resetMaxTimelineDuration();
+    }
   },
   updateProject: (updates: {
     name?: string;
@@ -403,6 +459,7 @@ export const useProjectStore = create<ProjectState>((set, get) => {
     backgroundColorTransparent?: boolean;
     textColor?: string;
     fontSize?: number;
+    transitionOut?: AppliedTransition;
   }) => {
     const { project } = get();
     if (!project) return;
@@ -426,6 +483,7 @@ export const useProjectStore = create<ProjectState>((set, get) => {
     if (updates.backgroundColorTransparent !== undefined) next.backgroundColorTransparent = updates.backgroundColorTransparent;
     if (updates.textColor !== undefined) next.textColor = updates.textColor;
     if (updates.fontSize !== undefined) next.fontSize = updates.fontSize;
+    if (updates.transitionOut !== undefined) next.transitionOut = updates.transitionOut;
     items[idx] = next;
     const timelines = (root.timelines ?? []).map((t) =>
       t.id === active.id ? { ...t, items } : t
@@ -721,6 +779,18 @@ export const useProjectStore = create<ProjectState>((set, get) => {
       pendingMedia: [...s.pendingMedia, { tempPath, file }],
     }));
   },
+  addMediaPath: (path: string) => {
+    const { project } = get();
+    if (!project) return;
+    const media = Array.isArray(project.root?.media) ? [...project.root.media] : [];
+    if (media.some((m) => m.path === path)) return;
+    media.push({ path });
+    set((s) =>
+      s.project
+        ? { project: { ...s.project, root: { ...s.project.root, media } }, isDirty: true }
+        : s
+    );
+  },
   addTextMedia: () => {
     const { project } = get();
     if (!project) return null;
@@ -786,6 +856,7 @@ export const useProjectStore = create<ProjectState>((set, get) => {
     });
     if (!res.ok) return;
     set({ isDirty: false, pendingMedia: [] });
+    await fetch(`${baseUrl}/api/projects/${project.id}/temp`, { method: 'DELETE' });
     await loadProject(project.id);
   },
   createProject: async () => {

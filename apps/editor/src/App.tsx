@@ -1,9 +1,9 @@
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useThemeStore } from './stores/themeStore';
-import { useInitialProjectId } from './hooks/useInitialProjectId';
-import { useMenuActions } from './hooks/useMenuActions';
-import { EditorHeader, LeftSidebar, RightSidebar, PlaybackControls, PreviewPanel, TimelinePanel } from './components';
+import { useThemeStore } from '@/stores/themeStore';
+import { useInitialProjectId } from '@/hooks/useInitialProjectId';
+import { useMenuActions } from '@/hooks/useMenuActions';
+import { EditorHeader, LeftSidebar, RightSidebar, PlaybackControls, PreviewPanel, TimelinePanel } from '@/components';
 
 export default function App() {
   const { i18n } = useTranslation();

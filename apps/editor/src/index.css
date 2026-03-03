@@ -68,3 +68,234 @@ html:not(.dark) .rte-timeline-wrapper .timeline-editor {
     scrollbar-color: rgb(71 85 105) rgb(37 37 37);
   }
 }
+
+/* Transition previews - FFmpeg xfade equivalents */
+.transition-preview {
+  position: absolute;
+  inset: 0;
+}
+.transition-preview::before,
+.transition-preview::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+.transition-preview::before { background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); }
+.transition-preview::after { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); }
+
+/* Fade / dissolve / fade variants */
+.transition-preview-fade::after { animation: tp-fade 2s ease-in-out infinite; }
+.transition-preview-dissolve::after { animation: tp-fade 2s ease-in-out infinite; }
+.transition-preview-fadeblack::after { animation: tp-fade-via-black 2s ease-in-out infinite; }
+.transition-preview-fadewhite::after { animation: tp-fade-via-white 2s ease-in-out infinite; }
+.transition-preview-fadegrays::after { animation: tp-fade 2s ease-in-out infinite; }
+.transition-preview-fadefast::after { animation: tp-fade 1.5s ease-in infinite; }
+.transition-preview-fadeslow::after { animation: tp-fade 2.5s ease-out infinite; }
+
+/* Wipe directions */
+.transition-preview-wipeleft::after { animation: tp-wipe-left 2s ease-in-out infinite; }
+.transition-preview-wiperight::after { animation: tp-wipe-right 2s ease-in-out infinite; }
+.transition-preview-wipeup::after { animation: tp-wipe-up 2s ease-in-out infinite; }
+.transition-preview-wipedown::after { animation: tp-wipe-down 2s ease-in-out infinite; }
+.transition-preview-smoothleft::after { animation: tp-wipe-left 2s cubic-bezier(0.4,0,0.2,1) infinite; }
+.transition-preview-smoothright::after { animation: tp-wipe-right 2s cubic-bezier(0.4,0,0.2,1) infinite; }
+.transition-preview-smoothup::after { animation: tp-wipe-up 2s cubic-bezier(0.4,0,0.2,1) infinite; }
+.transition-preview-smoothdown::after { animation: tp-wipe-down 2s cubic-bezier(0.4,0,0.2,1) infinite; }
+
+/* Slide */
+.transition-preview-slideleft::after { animation: tp-slide-left 2s ease-in-out infinite; }
+.transition-preview-slideright::after { animation: tp-slide-right 2s ease-in-out infinite; }
+.transition-preview-slideup::after { animation: tp-slide-up 2s ease-in-out infinite; }
+.transition-preview-slidedown::after { animation: tp-slide-down 2s ease-in-out infinite; }
+
+/* Circle */
+.transition-preview-circlecrop::after { animation: tp-circle-open 2s ease-in-out infinite; }
+.transition-preview-circleopen::after { animation: tp-circle-open 2s ease-in-out infinite; }
+.transition-preview-circleclose::after { animation: tp-circle-close 2s ease-in-out infinite; }
+.transition-preview-radial::after { animation: tp-radial 2s ease-in-out infinite; }
+
+/* Rect */
+.transition-preview-rectcrop::after { animation: tp-rect-close 2s ease-in-out infinite; }
+
+/* Vert / Horz */
+.transition-preview-vertopen::after { animation: tp-vert-open 2s ease-in-out infinite; }
+.transition-preview-vertclose::after { animation: tp-vert-close 2s ease-in-out infinite; }
+.transition-preview-horzopen::after { animation: tp-horz-open 2s ease-in-out infinite; }
+.transition-preview-horzclose::after { animation: tp-horz-close 2s ease-in-out infinite; }
+
+/* Diagonal wipes */
+.transition-preview-diagtl::after { animation: tp-diag-tl 2s ease-in-out infinite; }
+.transition-preview-diagtr::after { animation: tp-diag-tr 2s ease-in-out infinite; }
+.transition-preview-diagbl::after { animation: tp-diag-bl 2s ease-in-out infinite; }
+.transition-preview-diagbr::after { animation: tp-diag-br 2s ease-in-out infinite; }
+.transition-preview-wipetl::after { animation: tp-diag-tl 2s ease-in-out infinite; }
+.transition-preview-wipetr::after { animation: tp-diag-tr 2s ease-in-out infinite; }
+.transition-preview-wipebl::after { animation: tp-diag-bl 2s ease-in-out infinite; }
+.transition-preview-wipebr::after { animation: tp-diag-br 2s ease-in-out infinite; }
+
+/* Slice */
+.transition-preview-hlslice::after { animation: tp-slice-left 2s ease-in-out infinite; }
+.transition-preview-hrslice::after { animation: tp-slice-right 2s ease-in-out infinite; }
+.transition-preview-vuslice::after { animation: tp-slice-up 2s ease-in-out infinite; }
+.transition-preview-vdslice::after { animation: tp-slice-down 2s ease-in-out infinite; }
+
+/* Wind */
+.transition-preview-hlwind::after { animation: tp-wind-left 2s ease-in-out infinite; }
+.transition-preview-hrwind::after { animation: tp-wind-right 2s ease-in-out infinite; }
+.transition-preview-vuwind::after { animation: tp-wind-up 2s ease-in-out infinite; }
+.transition-preview-vdwind::after { animation: tp-wind-down 2s ease-in-out infinite; }
+
+/* Cover / Reveal */
+.transition-preview-coverleft::after { animation: tp-cover-left 2s ease-in-out infinite; }
+.transition-preview-coverright::after { animation: tp-cover-right 2s ease-in-out infinite; }
+.transition-preview-coverup::after { animation: tp-cover-up 2s ease-in-out infinite; }
+.transition-preview-coverdown::after { animation: tp-cover-down 2s ease-in-out infinite; }
+.transition-preview-revealleft::after { animation: tp-reveal-left 2s ease-in-out infinite; }
+.transition-preview-revealright::after { animation: tp-reveal-right 2s ease-in-out infinite; }
+.transition-preview-revealup::after { animation: tp-reveal-up 2s ease-in-out infinite; }
+.transition-preview-revealdown::after { animation: tp-reveal-down 2s ease-in-out infinite; }
+
+/* Squeeze */
+.transition-preview-squeezeh::after { animation: tp-squeeze-h 2s ease-in-out infinite; }
+.transition-preview-squeezev::after { animation: tp-squeeze-v 2s ease-in-out infinite; }
+
+/* Zoom / Distance / Pixelize / Blur */
+.transition-preview-zoomin::after { animation: tp-zoom-in 2s ease-in-out infinite; }
+.transition-preview-distance::after { animation: tp-distance 2s ease-in-out infinite; }
+.transition-preview-pixelize::after { animation: tp-pixelize 2s ease-in-out infinite; }
+.transition-preview-hblur::after { animation: tp-blur 2s ease-in-out infinite; }
+
+/* Keyframes */
+@keyframes tp-fade { 0% { opacity: 0; } 50% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes tp-fade-via-black {
+  0% { opacity: 0; filter: brightness(0); } 50% { opacity: 1; filter: brightness(1); } 100% { opacity: 0; filter: brightness(0); }
+}
+@keyframes tp-fade-via-white {
+  0% { opacity: 0; filter: brightness(2); } 50% { opacity: 1; filter: brightness(1); } 100% { opacity: 0; filter: brightness(2); }
+}
+@keyframes tp-wipe-left {
+  0% { clip-path: inset(0 100% 0 0); } 50% { clip-path: inset(0 0 0 0); } 100% { clip-path: inset(0 100% 0 0); }
+}
+@keyframes tp-wipe-right {
+  0% { clip-path: inset(0 0 0 100%); } 50% { clip-path: inset(0 0 0 0); } 100% { clip-path: inset(0 0 0 100%); }
+}
+@keyframes tp-wipe-up {
+  0% { clip-path: inset(100% 0 0 0); } 50% { clip-path: inset(0 0 0 0); } 100% { clip-path: inset(100% 0 0 0); }
+}
+@keyframes tp-wipe-down {
+  0% { clip-path: inset(0 0 100% 0); } 50% { clip-path: inset(0 0 0 0); } 100% { clip-path: inset(0 0 100% 0); }
+}
+@keyframes tp-slide-left {
+  0% { transform: translateX(-100%); } 50% { transform: translateX(0); } 100% { transform: translateX(-100%); }
+}
+@keyframes tp-slide-right {
+  0% { transform: translateX(100%); } 50% { transform: translateX(0); } 100% { transform: translateX(100%); }
+}
+@keyframes tp-slide-up {
+  0% { transform: translateY(-100%); } 50% { transform: translateY(0); } 100% { transform: translateY(-100%); }
+}
+@keyframes tp-slide-down {
+  0% { transform: translateY(100%); } 50% { transform: translateY(0); } 100% { transform: translateY(100%); }
+}
+@keyframes tp-circle-open {
+  0% { clip-path: circle(0% at 50% 50%); } 50% { clip-path: circle(150% at 50% 50%); } 100% { clip-path: circle(0% at 50% 50%); }
+}
+@keyframes tp-circle-close {
+  0% { clip-path: circle(150% at 50% 50%); } 50% { clip-path: circle(0% at 50% 50%); } 100% { clip-path: circle(150% at 50% 50%); }
+}
+@keyframes tp-radial {
+  0% { clip-path: circle(0% at 50% 50%); opacity: 0; } 50% { clip-path: circle(70% at 50% 50%); opacity: 1; } 100% { clip-path: circle(0% at 50% 50%); opacity: 0; }
+}
+@keyframes tp-rect-close {
+  0% { clip-path: inset(0 0 0 0); } 50% { clip-path: inset(25% 25% 25% 25%); } 100% { clip-path: inset(0 0 0 0); }
+}
+@keyframes tp-vert-open {
+  0% { clip-path: inset(50% 0 50% 0); } 50% { clip-path: inset(0 0 0 0); } 100% { clip-path: inset(50% 0 50% 0); }
+}
+@keyframes tp-vert-close {
+  0% { clip-path: inset(0 0 0 0); } 50% { clip-path: inset(50% 0 50% 0); } 100% { clip-path: inset(0 0 0 0); }
+}
+@keyframes tp-horz-open {
+  0% { clip-path: inset(0 50% 0 50%); } 50% { clip-path: inset(0 0 0 0); } 100% { clip-path: inset(0 50% 0 50%); }
+}
+@keyframes tp-horz-close {
+  0% { clip-path: inset(0 0 0 0); } 50% { clip-path: inset(0 50% 0 50%); } 100% { clip-path: inset(0 0 0 0); }
+}
+@keyframes tp-diag-tl {
+  0% { clip-path: polygon(0 0, 0 0, 0 0); } 50% { clip-path: polygon(0 0, 100% 0, 100% 100%); } 100% { clip-path: polygon(0 0, 0 0, 0 0); }
+}
+@keyframes tp-diag-tr {
+  0% { clip-path: polygon(100% 0, 100% 0, 100% 0); } 50% { clip-path: polygon(0 0, 100% 0, 0 100%); } 100% { clip-path: polygon(100% 0, 100% 0, 100% 0); }
+}
+@keyframes tp-diag-bl {
+  0% { clip-path: polygon(0 100%, 0 100%, 0 100%); } 50% { clip-path: polygon(0 0, 100% 100%, 100% 0); } 100% { clip-path: polygon(0 100%, 0 100%, 0 100%); }
+}
+@keyframes tp-diag-br {
+  0% { clip-path: polygon(100% 100%, 100% 100%, 100% 100%); } 50% { clip-path: polygon(0 0, 0 100%, 100% 0); } 100% { clip-path: polygon(100% 100%, 100% 100%, 100% 100%); }
+}
+@keyframes tp-slice-left {
+  0% { clip-path: inset(0 100% 0 0); } 25% { clip-path: inset(0 75% 0 0); } 50% { clip-path: inset(0 0 0 0); } 75% { clip-path: inset(0 25% 0 0); } 100% { clip-path: inset(0 100% 0 0); }
+}
+@keyframes tp-slice-right {
+  0% { clip-path: inset(0 0 0 100%); } 25% { clip-path: inset(0 0 0 75%); } 50% { clip-path: inset(0 0 0 0); } 75% { clip-path: inset(0 0 0 25%); } 100% { clip-path: inset(0 0 0 100%); }
+}
+@keyframes tp-slice-up {
+  0% { clip-path: inset(100% 0 0 0); } 25% { clip-path: inset(75% 0 0 0); } 50% { clip-path: inset(0 0 0 0); } 75% { clip-path: inset(25% 0 0 0); } 100% { clip-path: inset(100% 0 0 0); }
+}
+@keyframes tp-slice-down {
+  0% { clip-path: inset(0 0 100% 0); } 25% { clip-path: inset(0 0 75% 0); } 50% { clip-path: inset(0 0 0 0); } 75% { clip-path: inset(0 0 25% 0); } 100% { clip-path: inset(0 0 100% 0); }
+}
+@keyframes tp-wind-left {
+  0% { clip-path: inset(0 100% 0 0); transform: translateX(-5%); } 50% { clip-path: inset(0 0 0 0); transform: translateX(0); } 100% { clip-path: inset(0 100% 0 0); transform: translateX(-5%); }
+}
+@keyframes tp-wind-right {
+  0% { clip-path: inset(0 0 0 100%); transform: translateX(5%); } 50% { clip-path: inset(0 0 0 0); transform: translateX(0); } 100% { clip-path: inset(0 0 0 100%); transform: translateX(5%); }
+}
+@keyframes tp-wind-up {
+  0% { clip-path: inset(100% 0 0 0); transform: translateY(-5%); } 50% { clip-path: inset(0 0 0 0); transform: translateY(0); } 100% { clip-path: inset(100% 0 0 0); transform: translateY(-5%); }
+}
+@keyframes tp-wind-down {
+  0% { clip-path: inset(0 0 100% 0); transform: translateY(5%); } 50% { clip-path: inset(0 0 0 0); transform: translateY(0); } 100% { clip-path: inset(0 0 100% 0); transform: translateY(5%); }
+}
+@keyframes tp-cover-left {
+  0% { transform: translateX(0); } 50% { transform: translateX(-100%); } 100% { transform: translateX(0); }
+}
+@keyframes tp-cover-right {
+  0% { transform: translateX(0); } 50% { transform: translateX(100%); } 100% { transform: translateX(0); }
+}
+@keyframes tp-cover-up {
+  0% { transform: translateY(0); } 50% { transform: translateY(-100%); } 100% { transform: translateY(0); }
+}
+@keyframes tp-cover-down {
+  0% { transform: translateY(0); } 50% { transform: translateY(100%); } 100% { transform: translateY(0); }
+}
+@keyframes tp-reveal-left {
+  0% { clip-path: inset(0 100% 0 0); } 50% { clip-path: inset(0 0 0 0); } 100% { clip-path: inset(0 100% 0 0); }
+}
+@keyframes tp-reveal-right {
+  0% { clip-path: inset(0 0 0 100%); } 50% { clip-path: inset(0 0 0 0); } 100% { clip-path: inset(0 0 0 100%); }
+}
+@keyframes tp-reveal-up {
+  0% { clip-path: inset(100% 0 0 0); } 50% { clip-path: inset(0 0 0 0); } 100% { clip-path: inset(100% 0 0 0); }
+}
+@keyframes tp-reveal-down {
+  0% { clip-path: inset(0 0 100% 0); } 50% { clip-path: inset(0 0 0 0); } 100% { clip-path: inset(0 0 100% 0); }
+}
+@keyframes tp-squeeze-h {
+  0% { transform: scaleX(0); } 50% { transform: scaleX(1); } 100% { transform: scaleX(0); }
+}
+@keyframes tp-squeeze-v {
+  0% { transform: scaleY(0); } 50% { transform: scaleY(1); } 100% { transform: scaleY(0); }
+}
+@keyframes tp-zoom-in {
+  0% { transform: scale(0); opacity: 0; } 50% { transform: scale(1); opacity: 1; } 100% { transform: scale(0); opacity: 0; }
+}
+@keyframes tp-distance {
+  0% { transform: scale(0.3); opacity: 0.3; } 50% { transform: scale(1); opacity: 1; } 100% { transform: scale(0.3); opacity: 0.3; }
+}
+@keyframes tp-pixelize {
+  0% { filter: blur(20px); opacity: 0; } 50% { filter: blur(0); opacity: 1; } 100% { filter: blur(20px); opacity: 0; }
+}
+@keyframes tp-blur {
+  0% { filter: blur(0); opacity: 0; } 50% { filter: blur(8px); opacity: 1; } 100% { filter: blur(0); opacity: 0; }
+}

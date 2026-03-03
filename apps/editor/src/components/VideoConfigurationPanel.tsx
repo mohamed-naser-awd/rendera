@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { usePlaybackStore } from '../stores/playbackStore';
+import { usePlaybackStore } from '@/stores/playbackStore';
 
 /** Global video/preview configuration shown when no timeline item is selected. */
 export function VideoConfigurationPanel() {

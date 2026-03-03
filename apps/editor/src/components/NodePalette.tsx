@@ -1,4 +1,4 @@
-import type { TimelineNode } from '../stores/projectStore';
+import type { TimelineNode } from '@/stores/projectStore';
 
 export const NODE_TYPES: { type: string; label: string; duration: number }[] = [
   { type: 'clip', label: 'Clip', duration: 5 },
@@ -8,6 +8,27 @@ export const NODE_TYPES: { type: string; label: string; duration: number }[] = [
 
 const DRAG_TYPE_NODE = 'application/x-rendera-timeline-node';
 const DRAG_TYPE_MEDIA = 'application/x-rendera-media-item';
+export const DRAG_TYPE_TRANSITION = 'application/x-rendera-transition';
+
+export interface TransitionDragData {
+  transitionId: string;
+  requiresTwoVideos: boolean;
+}
+
+export function setDragTransitionData(dataTransfer: DataTransfer, data: TransitionDragData) {
+  dataTransfer.setData(DRAG_TYPE_TRANSITION, JSON.stringify(data));
+  dataTransfer.effectAllowed = 'copy';
+}
+
+export function getDragTransitionData(dataTransfer: DataTransfer): TransitionDragData | null {
+  const raw = dataTransfer.getData(DRAG_TYPE_TRANSITION);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as TransitionDragData;
+  } catch {
+    return null;
+  }
+}
 
 export function setDragNodeData(dataTransfer: DataTransfer, node: Omit<TimelineNode, 'id'>) {
   dataTransfer.setData(DRAG_TYPE_NODE, JSON.stringify(node));

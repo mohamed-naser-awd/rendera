@@ -1,8 +1,8 @@
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useProjectStore } from '../stores/projectStore';
-import { useThemeStore } from '../stores/themeStore';
-import { useClipboardActions } from './useClipboardActions';
+import { useProjectStore } from '@/stores/projectStore';
+import { useThemeStore } from '@/stores/themeStore';
+import { useClipboardActions } from '@/hooks/useClipboardActions';
 
 export function useMenuActions() {
   const { createProject, saveProject, undo, redo } = useProjectStore();

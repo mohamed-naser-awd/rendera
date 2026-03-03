@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useProjectStore } from '../stores/projectStore';
-import { useTimelineSelectionStore } from '../stores/timelineSelectionStore';
-import type { TimelineNode, CropRect, ObjectFit } from '../stores/projectStore';
+import { useProjectStore } from '@/stores/projectStore';
+import { useTimelineSelectionStore } from '@/stores/timelineSelectionStore';
+import type { TimelineNode, CropRect, ObjectFit } from '@/stores/projectStore';
 import CropDialog from './CropDialog';
+import { FFMPEG_XFADE_TRANSITIONS, DEFAULT_TRANSITION_DURATION, type TransitionId } from '@/lib/transitions';
 
 const OBJECT_FIT_OPTIONS: { value: ObjectFit; labelKey: string }[] = [
   { value: 'contain', labelKey: 'editor.item.fill.contain' },
@@ -265,6 +266,58 @@ export function ItemConfigurationPanel({
           }}
           className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-white/20 bg-white dark:bg-[#1e1e1e] text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
         />
+      </div>
+
+      <div>
+        <label className="block text-xs font-medium text-slate-600 dark:text-white/70 mb-1">
+          {t('editor.item.transitionOut', 'Transition out')}
+        </label>
+        <select
+          value={block.transitionOut?.type ?? ''}
+          onChange={(e) => {
+            const v = e.target.value;
+            if (v === '') {
+              updateTimelineNode(block.id, { transitionOut: undefined });
+            } else {
+              updateTimelineNode(block.id, {
+                transitionOut: {
+                  type: v as TransitionId,
+                  duration: block.transitionOut?.duration ?? DEFAULT_TRANSITION_DURATION,
+                },
+              });
+            }
+          }}
+          className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-white/20 bg-white dark:bg-[#1e1e1e] text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+        >
+          <option value="">{t('editor.transitions.none', 'None')}</option>
+          {FFMPEG_XFADE_TRANSITIONS.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.label}
+            </option>
+          ))}
+        </select>
+        {block.transitionOut && (
+          <div className="mt-1.5">
+            <label className="block text-xs text-slate-500 dark:text-white/50 mb-0.5">
+              {t('editor.transitions.duration', 'Duration')} (s)
+            </label>
+            <input
+              type="number"
+              min={0.1}
+              max={5}
+              step={0.1}
+              value={block.transitionOut.duration}
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                if (!Number.isNaN(v))
+                  updateTimelineNode(block.id, {
+                    transitionOut: { ...block.transitionOut!, duration: Math.max(0.1, Math.min(5, v)) },
+                  });
+              }}
+              className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-white/20 bg-white dark:bg-[#1e1e1e] text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+        )}
       </div>
 
       <div className="flex flex-col gap-2">

@@ -1,9 +1,12 @@
+import { useState } from 'react';
 import { EditableProjectName } from './EditableProjectName';
-import { useProjectStore } from '../stores/projectStore';
-import { useClipboardActions } from '../hooks/useClipboardActions';
+import { SettingsDialog } from './SettingsDialog';
+import { useProjectStore } from '@/stores/projectStore';
+import { useClipboardActions } from '@/hooks/useClipboardActions';
 
 export function EditorHeader() {
-  const { project, isDirty, saveProject, undo, redo, undoStack, redoStack } = useProjectStore();
+  const { project, isDirty, saveProject, discardProjectTemp, undo, redo, undoStack, redoStack } = useProjectStore();
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const { copy, cut, paste, deleteSelected, canCopy, canPaste, canDelete } = useClipboardActions();
 
   return (
@@ -92,20 +95,45 @@ export function EditorHeader() {
         </button>
         <div className="w-px h-6 bg-slate-200 dark:bg-white/10" />
         {project && (
-          <button
-            type="button"
-            onClick={() => saveProject()}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium ${
-              isDirty
-                ? 'bg-amber-500 hover:bg-amber-400 text-white'
-                : 'bg-slate-200 dark:bg-[#383838] text-slate-600 dark:text-white/70 hover:bg-slate-300 dark:hover:bg-[#424242]'
-            }`}
-            aria-label="Save"
-            title={isDirty ? 'Unsaved changes (Ctrl+S)' : 'Saved'}
-          >
-            {isDirty ? 'Save' : 'Saved'}
-          </button>
+          <>
+            {isDirty && (
+              <button
+                type="button"
+                onClick={() => project && window.confirm('Discard unsaved changes?') && discardProjectTemp(project.id)}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium text-slate-600 dark:text-white/70 hover:bg-slate-200 dark:hover:bg-[#383838]"
+                aria-label="Revert"
+                title="Discard changes and reload"
+              >
+                Revert
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => saveProject()}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium ${
+                isDirty
+                  ? 'bg-amber-500 hover:bg-amber-400 text-white'
+                  : 'bg-slate-200 dark:bg-[#383838] text-slate-600 dark:text-white/70 hover:bg-slate-300 dark:hover:bg-[#424242]'
+              }`}
+              aria-label="Save"
+              title={isDirty ? 'Unsaved changes (Ctrl+S)' : 'Saved'}
+            >
+              {isDirty ? 'Save' : 'Saved'}
+            </button>
+          </>
         )}
+        <button
+          type="button"
+          onClick={() => setSettingsOpen(true)}
+          className="p-2 rounded-lg text-slate-600 dark:text-white/70 hover:bg-slate-100 dark:hover:bg-white/10"
+          aria-label="Settings"
+          title="Settings"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        </button>
         <button
           type="button"
           className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium"
@@ -114,6 +142,7 @@ export function EditorHeader() {
           Share
         </button>
       </div>
+      {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
     </header>
   );
 }

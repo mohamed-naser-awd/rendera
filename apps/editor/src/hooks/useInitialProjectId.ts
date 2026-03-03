@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useProjectStore } from '../stores/projectStore';
+import { useProjectStore } from '@/stores/projectStore';
 
 export function useInitialProjectId() {
   const { loadProject } = useProjectStore();

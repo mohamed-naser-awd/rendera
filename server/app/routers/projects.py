@@ -15,6 +15,21 @@ from app.db import get_db
 router = APIRouter()
 
 MEDIA_BASE = Path(__file__).resolve().parent.parent.parent / "media"
+TEMP_FILENAME = ".project_temp.json"
+
+
+def _project_dir(project_id: str) -> Path:
+    """Project folder: media/{project_id}/. Contains uploaded media, generated/, and temp file."""
+    d = MEDIA_BASE / project_id
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _generated_dir(project_id: str) -> Path:
+    """Generated files from transforms (noise cancellation, nano banana, voice over, etc.)."""
+    d = _project_dir(project_id) / "generated"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
 
 
 class ProjectCreate(BaseModel):
@@ -81,11 +96,10 @@ async def add_project_media(project_id: str, file: UploadFile = File(...)) -> di
     root = _root_with_media(root)
     media_list = list(root.get("media") or [])
 
-    # Save file to media/{project_id}/{unique}_{filename}
+    # Save file to project folder media/{project_id}/{unique}_{filename}
     ext = Path(file.filename or "file").suffix
     safe_name = f"{uuid.uuid4().hex[:8]}{ext}"
-    project_media_dir = MEDIA_BASE / project_id
-    project_media_dir.mkdir(parents=True, exist_ok=True)
+    project_media_dir = _project_dir(project_id)
     dest = project_media_dir / safe_name
     contents = await file.read()
     dest.write_bytes(contents)
@@ -105,10 +119,10 @@ async def add_project_media(project_id: str, file: UploadFile = File(...)) -> di
     return {"path": stored_path}
 
 
-@router.get("/{project_id}/media/{filename}")
+@router.get("/{project_id}/media/{filename:path}")
 async def get_project_media_file(project_id: str, filename: str) -> FileResponse:
-    """Serve a media file from a project."""
-    if ".." in filename or "/" in filename or "\\" in filename:
+    """Serve a media file from a project (e.g. 'foo.mp4' or 'generated/voiceover_xxx.mp3')."""
+    if ".." in filename or filename.startswith("/") or "\\" in filename:
         raise HTTPException(status_code=400, detail="Invalid path")
     file_path = MEDIA_BASE / project_id / filename
     if not file_path.exists() or not file_path.is_file():
@@ -216,4 +230,72 @@ async def delete_project(project_id: str) -> dict:
     async with get_db() as db:
         await db.execute("DELETE FROM projects WHERE id = ?", (project_id,))
         await db.commit()
+    return {"id": project_id}
+
+
+# ----- Temporary project state (draft): copy of latest, updated on each change; sync on save, discard on cancel -----
+
+@router.get("/{project_id}/temp")
+async def get_project_temp(project_id: str) -> dict:
+    """Get temporary/draft project state if it exists (unsaved changes). Returns 404 if no temp."""
+    async with get_db() as db:
+        cursor = await db.execute("SELECT id FROM projects WHERE id = ?", (project_id,))
+        if await cursor.fetchone() is None:
+            raise HTTPException(status_code=404, detail="Project not found")
+    temp_path = _project_dir(project_id) / TEMP_FILENAME
+    if not temp_path.exists() or not temp_path.is_file():
+        raise HTTPException(status_code=404, detail="No temporary project state")
+    root = json.loads(temp_path.read_text(encoding="utf-8"))
+    return {"root": _root_with_media(root)}
+
+
+class ProjectTempUpdate(BaseModel):
+    root: dict[str, Any]
+
+
+@router.put("/{project_id}/temp")
+async def put_project_temp(project_id: str, body: ProjectTempUpdate) -> dict:
+    """Store temporary project state (full root). Overwrites any existing temp."""
+    async with get_db() as db:
+        cursor = await db.execute("SELECT id FROM projects WHERE id = ?", (project_id,))
+        if await cursor.fetchone() is None:
+            raise HTTPException(status_code=404, detail="Project not found")
+    temp_path = _project_dir(project_id) / TEMP_FILENAME
+    temp_path.write_text(json.dumps(body.root), encoding="utf-8")
+    return {"ok": True}
+
+
+@router.delete("/{project_id}/temp")
+async def delete_project_temp(project_id: str) -> dict:
+    """Discard temporary project state (e.g. on cancel)."""
+    async with get_db() as db:
+        cursor = await db.execute("SELECT id FROM projects WHERE id = ?", (project_id,))
+        if await cursor.fetchone() is None:
+            raise HTTPException(status_code=404, detail="Project not found")
+    temp_path = _project_dir(project_id) / TEMP_FILENAME
+    if temp_path.exists():
+        temp_path.unlink()
+    return {"ok": True}
+
+
+@router.post("/{project_id}/sync-temp")
+async def sync_temp_to_project(project_id: str) -> dict:
+    """Copy temp project state into the project (save). Then remove temp file."""
+    async with get_db() as db:
+        cursor = await db.execute("SELECT id, root FROM projects WHERE id = ?", (project_id,))
+        row = await cursor.fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Project not found")
+    temp_path = _project_dir(project_id) / TEMP_FILENAME
+    if not temp_path.exists() or not temp_path.is_file():
+        raise HTTPException(status_code=400, detail="No temporary state to sync")
+    root = json.loads(temp_path.read_text(encoding="utf-8"))
+    root = _root_with_media(root)
+    async with get_db() as db:
+        await db.execute(
+            "UPDATE projects SET root = ?, updated_at = ? WHERE id = ?",
+            (json.dumps(root), datetime.utcnow().isoformat(), project_id),
+        )
+        await db.commit()
+    temp_path.unlink()
     return {"id": project_id}

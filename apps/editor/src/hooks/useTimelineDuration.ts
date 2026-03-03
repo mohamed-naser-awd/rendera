@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
-import { useProjectStore } from '../stores/projectStore';
-import { getActiveTimeline } from '../stores/projectStore';
-import { usePlaybackStore } from '../stores/playbackStore';
+import { useProjectStore } from '@/stores/projectStore';
+import { getActiveTimeline } from '@/stores/projectStore';
+import { usePlaybackStore } from '@/stores/playbackStore';
 
 /** Extra seconds at end of timeline for drag-and-drop space. */
 const EXTRA_DROP_SPACE_SEC = 10;

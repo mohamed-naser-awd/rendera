@@ -1,16 +1,24 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useProjectStore } from '../stores/projectStore';
-import { getActiveTimeline } from '../stores/projectStore';
-import type { TimelineNode } from '../stores/projectStore';
-import { useTimelineSelectionStore } from '../stores/timelineSelectionStore';
-import { useMediaSelectionStore } from '../stores/mediaSelectionStore';
-import { usePlaybackStore } from '../stores/playbackStore';
-import { useClipboardActions } from '../hooks/useClipboardActions';
-import { useTimelineDuration } from '../hooks/useTimelineDuration';
-import { getDragNodeData, getDragMediaData } from './NodePalette';
+import { useProjectStore } from '@/stores/projectStore';
+import { getActiveTimeline } from '@/stores/projectStore';
+import type { TimelineNode } from '@/stores/projectStore';
+import { useTimelineSelectionStore } from '@/stores/timelineSelectionStore';
+import { useMediaSelectionStore } from '@/stores/mediaSelectionStore';
+import { usePlaybackStore } from '@/stores/playbackStore';
+import { useClipboardActions } from '@/hooks/useClipboardActions';
+import { useTimelineDuration } from '@/hooks/useTimelineDuration';
+import { getDragNodeData, getDragMediaData, getDragTransitionData } from './NodePalette';
 import CropDialog from './CropDialog';
 import { RteTimeline } from './RteTimeline';
+import { DEFAULT_TRANSITION_DURATION } from '@/lib/transitions';
+import {
+  transformNoiseCancellation,
+  transformNanoBanana,
+  transformExtractTranscript,
+  transformVoiceOver,
+  transformRecordVoice,
+} from '@/lib/transformApi';
 
 /** Zoom levels: duration per segment in seconds. */
 const SEC = 1;
@@ -55,6 +63,7 @@ export function TimelinePanel() {
     setActiveTimeline,
     renameTimeline,
     addTimelineNode,
+    addMediaPath,
     updateTimelineNode,
     removeTimelineNodes,
     recordForUndo,
@@ -73,8 +82,13 @@ export function TimelinePanel() {
   const [trackContextMenu, setTrackContextMenu] = useState<TrackContextMenu>(null);
   const [rowContextMenu, setRowContextMenu] = useState<RowContextMenu>(null);
   const [zoomLevelIndex, setZoomLevelIndex] = useState(DEFAULT_ZOOM_INDEX);
+  const [transformBusy, setTransformBusy] = useState<string | null>(null);
+  const [transformSubmenuOpen, setTransformSubmenuOpen] = useState(false);
+  const transformSubmenuTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const trackScrollRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const recordVoiceInputRef = useRef<HTMLInputElement>(null);
+  const pendingRecordBlockIdRef = useRef<string | null>(null);
 
   const root = project?.root;
   const activeTimeline = root ? getActiveTimeline(root) : null;
@@ -99,6 +113,7 @@ export function TimelinePanel() {
   useEffect(() => {
     function closeContextMenu() {
       setContextMenu(null);
+      setTransformSubmenuOpen(false);
     }
     if (contextMenu) {
       window.addEventListener('click', closeContextMenu);
@@ -138,6 +153,43 @@ export function TimelinePanel() {
     }
   }, [rowContextMenu]);
 
+  const ROW_HEIGHT = 48;
+
+  function getDropPosition(clientX: number, clientY: number): { trackIndex: number; time: number } | null {
+    const wrapper = trackScrollRef.current;
+    const editArea = wrapper?.querySelector('.timeline-editor-edit-area') as HTMLElement | null;
+    const grid = editArea?.querySelector('.ReactVirtualized__Grid') as HTMLElement | null;
+    if (!grid) return null;
+    const rect = grid.getBoundingClientRect();
+    const scrollLeft = grid.scrollLeft ?? 0;
+    const scrollTop = grid.scrollTop ?? 0;
+    const scale = ZOOM_LEVELS_SEC[zoomLevelIndex] ?? 30;
+    const scaleWidth = Math.max(20, (containerWidth - 48) / 5);
+    const localX = clientX - rect.left + scrollLeft;
+    const localY = clientY - rect.top + scrollTop;
+    const trackIndex = Math.floor(localY / ROW_HEIGHT);
+    if (trackIndex < 0) return null;
+    const time = Math.max(0, (localX * scale) / scaleWidth);
+    return { trackIndex: Math.max(0, trackIndex), time };
+  }
+
+  /** Find two adjacent clips on the same track such that the boundary between them is near the given time. */
+  function findAdjacentClipsAtTime(
+    blocks: BlockWithStart[],
+    trackIndex: number,
+    time: number,
+    tolerance = 0.5
+  ): { left: BlockWithStart; right: BlockWithStart } | null {
+    const onTrack = blocks.filter((b) => (b.trackIndex ?? 0) === trackIndex).sort((a, b) => a.start - b.start);
+    for (let i = 0; i < onTrack.length - 1; i++) {
+      const left = onTrack[i];
+      const right = onTrack[i + 1];
+      const boundary = left.start + left.duration;
+      if (Math.abs(boundary - time) <= tolerance) return { left, right };
+    }
+    return null;
+  }
+
   function handleDragOver(e: React.DragEvent) {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'copy';
@@ -152,6 +204,48 @@ export function TimelinePanel() {
     e.preventDefault();
     setDragOver(false);
     const trackIndex = dropTargetTrackIndex;
+    const transitionData = getDragTransitionData(e.dataTransfer);
+    if (transitionData) {
+      const pos = getDropPosition(e.clientX, e.clientY);
+      const blocks: BlockWithStart[] = items.map((node, idx) => {
+        const start = node.startTime ?? (idx === 0 ? 0 : items.slice(0, idx).reduce((s, n) => s + n.duration, 0));
+        return { ...node, start };
+      });
+      if (transitionData.requiresTwoVideos && pos) {
+        const pair = findAdjacentClipsAtTime(blocks, pos.trackIndex, pos.time);
+        if (pair) {
+          recordForUndo?.();
+          updateTimelineNode(pair.left.id, {
+            transitionOut: { type: transitionData.transitionId as import('../lib/transitions').TransitionId, duration: DEFAULT_TRANSITION_DURATION },
+          });
+          return;
+        }
+      }
+      if (!transitionData.requiresTwoVideos && selectedIds.length === 1) {
+        const block = blocks.find((b) => b.id === selectedIds[0]);
+        if (block) {
+          recordForUndo?.();
+          updateTimelineNode(block.id, {
+            transitionOut: { type: transitionData.transitionId as import('../lib/transitions').TransitionId, duration: DEFAULT_TRANSITION_DURATION },
+          });
+          return;
+        }
+      }
+      if (selectedIds.length === 2) {
+        const [a, b] = selectedIds.map((id) => blocks.find((bl) => bl.id === id)!).filter(Boolean);
+        if (a && b && (a.trackIndex ?? 0) === (b.trackIndex ?? 0)) {
+          const [left, right] = a.start < b.start ? [a, b] : [b, a];
+          if (Math.abs(left.start + left.duration - right.start) < 0.1) {
+            recordForUndo?.();
+            updateTimelineNode(left.id, {
+              transitionOut: { type: transitionData.transitionId as import('../lib/transitions').TransitionId, duration: DEFAULT_TRANSITION_DURATION },
+            });
+            return;
+          }
+        }
+      }
+      return;
+    }
     const mediaData = getDragMediaData(e.dataTransfer);
     if (mediaData) {
       const root = project?.root;
@@ -186,8 +280,6 @@ export function TimelinePanel() {
     const start = node.startTime ?? (idx === 0 ? 0 : items.slice(0, idx).reduce((s, n) => s + n.duration, 0));
     return { ...node, start };
   });
-  const sortedBlocks = [...blocks].sort((a, b) => a.start - b.start);
-  const sortedIds = sortedBlocks.map((b) => b.id);
   /** Number of tracks: at least trackCount from timeline, or from items, or 1. */
   const maxTrackFromItems = blocks.length > 0
     ? Math.max(...blocks.map((b) => (b.trackIndex ?? 0) + 1))
@@ -201,6 +293,56 @@ export function TimelinePanel() {
     removeTimelineNodes(selectedIds);
     clearSelection();
     setContextMenu(null);
+  }
+
+  async function runTransformFromNode(
+    blockId: string,
+    kind: 'noise' | 'nano' | 'transcript' | 'voiceover' | 'record',
+    extra?: { text?: string; file?: File }
+  ) {
+    if (!project) return;
+    const block = blocks.find((b) => b.id === blockId) as BlockWithStart | undefined;
+    const startTime = block?.start ?? videoTime;
+    const trackAbove = block ? Math.min((block.trackIndex ?? 0) + 1, trackCount) : 0;
+    const source = { node_id: blockId };
+    setContextMenu(null);
+    setTransformBusy(kind);
+    try {
+      if (kind === 'noise') {
+        const r = await transformNoiseCancellation(project.id, source);
+        addMediaPath(r.path);
+        addTimelineNode(
+          { type: 'video', duration: 5, label: 'Noise cancelled', mediaPath: r.path },
+          { startTime, trackIndex: trackAbove }
+        );
+      } else if (kind === 'nano') {
+        const r = await transformNanoBanana(project.id, source, extra?.text ?? undefined);
+        addMediaPath(r.path);
+        addTimelineNode(
+          { type: 'image', duration: 5, label: 'Nano Banana', mediaPath: r.path },
+          { startTime, trackIndex: trackAbove }
+        );
+      } else if (kind === 'transcript') {
+        const r = await transformExtractTranscript(project.id, source);
+        addMediaPath(r.path);
+      } else if (kind === 'voiceover' && extra?.text) {
+        const r = await transformVoiceOver(project.id, extra.text, blockId);
+        addMediaPath(r.path);
+        addTimelineNode(
+          { type: 'video', duration: 5, label: 'Voice over', mediaPath: r.path },
+          { startTime, trackIndex: trackAbove }
+        );
+      } else if (kind === 'record' && extra?.file) {
+        const r = await transformRecordVoice(project.id, extra.file, blockId, startTime);
+        addMediaPath(r.path);
+        addTimelineNode(
+          { type: 'video', duration: 5, label: 'Recorded voice', mediaPath: r.path },
+          { startTime: r.start_time ?? startTime, trackIndex: trackAbove }
+        );
+      }
+    } finally {
+      setTransformBusy(null);
+    }
   }
 
   return (
@@ -342,10 +484,10 @@ export function TimelinePanel() {
             selectedIds={selectedIds}
             onSelect={(actionId, addToSelection) => {
                 useMediaSelectionStore.getState().setSelectedMediaPath(null);
-                setSelection(actionId, addToSelection, sortedIds);
+                setSelection(actionId, addToSelection, blocks);
               }}
             onContextMenu={(actionId, e) => {
-              if (!isSelected(actionId)) setSelection(actionId, false, sortedIds);
+              if (!isSelected(actionId)) setSelection(actionId, false, blocks);
               setContextMenu({ x: e.clientX, y: e.clientY, blockId: actionId });
             }}
             onContextMenuRow={(trackIndex, time, e) => {
@@ -483,6 +625,93 @@ export function TimelinePanel() {
           </svg>
           {t('editor.timeline.delete', 'Delete')}
         </button>
+        <div className="my-1 border-t border-slate-200 dark:border-white/10" />
+        <div
+          className="relative"
+          onMouseEnter={() => {
+            if (transformSubmenuTimerRef.current) {
+              clearTimeout(transformSubmenuTimerRef.current);
+              transformSubmenuTimerRef.current = null;
+            }
+            setTransformSubmenuOpen(true);
+          }}
+          onMouseLeave={() => {
+            transformSubmenuTimerRef.current = setTimeout(() => setTransformSubmenuOpen(false), 150);
+          }}
+        >
+          <div className="w-full px-3 py-2 text-left text-sm text-slate-700 dark:text-white/90 hover:bg-slate-100 dark:hover:bg-[#383838] flex items-center justify-between gap-2 cursor-default">
+            <span>{t('editor.tabs.transform', 'Transform')}</span>
+            <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </div>
+          {transformSubmenuOpen && (
+            <div
+              className="absolute left-full top-0 ml-0.5 min-w-[180px] py-1 rounded-lg shadow-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-[#2d2d2d] z-[60]"
+              onMouseEnter={() => {
+                if (transformSubmenuTimerRef.current) {
+                  clearTimeout(transformSubmenuTimerRef.current);
+                  transformSubmenuTimerRef.current = null;
+                }
+              }}
+              onMouseLeave={() => {
+                transformSubmenuTimerRef.current = setTimeout(() => setTransformSubmenuOpen(false), 150);
+              }}
+            >
+              <button
+                type="button"
+                className="w-full px-3 py-2 text-left text-sm text-slate-700 dark:text-white/90 hover:bg-slate-100 dark:hover:bg-[#383838] flex items-center gap-2 disabled:opacity-50"
+                disabled={!!transformBusy}
+                onClick={() => runTransformFromNode(contextMenu.blockId, 'noise')}
+              >
+                {t('editor.transform.noiseCancellation', 'Noise Cancellation')}
+              </button>
+              <button
+                type="button"
+                className="w-full px-3 py-2 text-left text-sm text-slate-700 dark:text-white/90 hover:bg-slate-100 dark:hover:bg-[#383838] flex items-center gap-2 disabled:opacity-50"
+                disabled={!!transformBusy}
+                onClick={() => {
+                  const text = window.prompt(t('editor.transform.promptPlaceholder', 'Describe edit or leave empty'));
+                  runTransformFromNode(contextMenu.blockId, 'nano', { text: text ?? undefined });
+                }}
+              >
+                {t('editor.transform.nanoBanana', 'Nano Banana')}
+              </button>
+              <button
+                type="button"
+                className="w-full px-3 py-2 text-left text-sm text-slate-700 dark:text-white/90 hover:bg-slate-100 dark:hover:bg-[#383838] flex items-center gap-2 disabled:opacity-50"
+                disabled={!!transformBusy}
+                onClick={() => runTransformFromNode(contextMenu.blockId, 'transcript')}
+              >
+                {t('editor.transform.extractTranscript', 'Extract Transcript')}
+              </button>
+              <button
+                type="button"
+                className="w-full px-3 py-2 text-left text-sm text-slate-700 dark:text-white/90 hover:bg-slate-100 dark:hover:bg-[#383838] flex items-center gap-2 disabled:opacity-50"
+                disabled={!!transformBusy}
+                onClick={() => {
+                  const text = window.prompt(t('editor.transform.voiceOverPlaceholder', 'Type text to generate speech'));
+                  if (text?.trim()) runTransformFromNode(contextMenu.blockId, 'voiceover', { text: text.trim() });
+                }}
+              >
+                {t('editor.transform.voiceOver', 'Voice Over')}
+              </button>
+              <button
+                type="button"
+                className="w-full px-3 py-2 text-left text-sm text-slate-700 dark:text-white/90 hover:bg-slate-100 dark:hover:bg-[#383838] flex items-center gap-2 disabled:opacity-50"
+                disabled={!!transformBusy}
+                onClick={() => {
+                  pendingRecordBlockIdRef.current = contextMenu.blockId;
+                  setContextMenu(null);
+                  recordVoiceInputRef.current?.click();
+                }}
+              >
+                {t('editor.transform.recordVoice', 'Record Voice')}
+              </button>
+            </div>
+          )}
+        </div>
+        <div className="my-1 border-t border-slate-200 dark:border-white/10" />
         <button
           type="button"
           className="w-full px-3 py-2 text-left text-sm text-slate-700 dark:text-white/90 hover:bg-slate-100 dark:hover:bg-[#383838] flex items-center gap-2"
@@ -495,6 +724,21 @@ export function TimelinePanel() {
         </button>
       </div>
     )}
+    <input
+      ref={recordVoiceInputRef}
+      type="file"
+      accept="audio/*,video/webm"
+      className="hidden"
+      onChange={(e) => {
+        const file = e.target.files?.[0];
+        const blockId = pendingRecordBlockIdRef.current;
+        if (file && blockId && project) {
+          pendingRecordBlockIdRef.current = null;
+          runTransformFromNode(blockId, 'record', { file });
+        }
+        e.target.value = '';
+      }}
+    />
     {trackContextMenu !== null && (
       <div
         className="fixed z-50 min-w-[160px] py-1 rounded-lg shadow-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-[#2d2d2d]"

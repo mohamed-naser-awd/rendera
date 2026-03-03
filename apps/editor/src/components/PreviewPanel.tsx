@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useProjectStore } from '../stores/projectStore';
-import { getActiveTimeline } from '../stores/projectStore';
-import { usePlaybackStore } from '../stores/playbackStore';
+import { useProjectStore } from '@/stores/projectStore';
+import { getActiveTimeline } from '@/stores/projectStore';
+import { usePlaybackStore } from '@/stores/playbackStore';
 import { getDragNodeData } from './NodePalette';
-import { getApiBaseUrl } from '../../../../shared/getApiUrl';
-import type { TimelineNode } from '../stores/projectStore';
+import { getApiBaseUrl } from '@shared/getApiUrl';
+import type { TimelineNode } from '@/stores/projectStore';
 
 const IMAGE_EXT = /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i;
 const VIDEO_EXT = /\.(mp4|webm|mov|avi|mkv)$/i;

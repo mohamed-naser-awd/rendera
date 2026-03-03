@@ -22,6 +22,12 @@ async def init_db() -> None:
                 root TEXT
             )
         """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT
+            )
+        """)
         await db.commit()
 
 

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useProjectStore } from '../stores/projectStore';
-import type { TimelineNode, CropRect } from '../stores/projectStore';
-import { getApiBaseUrl } from '../../../../shared/getApiUrl';
+import { useProjectStore } from '@/stores/projectStore';
+import type { TimelineNode, CropRect } from '@/stores/projectStore';
+import { getApiBaseUrl } from '@shared/getApiUrl';
 
 const DEFAULT_CROP: CropRect = { top: 0, right: 0, bottom: 0, left: 0 };
 

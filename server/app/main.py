@@ -6,7 +6,7 @@ Central backend: projects (SQLite), FFmpeg, AI, marketplace.
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import projects
+from app.routers import projects, transforms, settings
 
 app = FastAPI(
     title="Rendera API",
@@ -23,6 +23,8 @@ app.add_middleware(
 )
 
 app.include_router(projects.router, prefix="/api/projects", tags=["projects"])
+app.include_router(transforms.router, prefix="/api/projects", tags=["transforms"])
+app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 
 
 @app.get("/health")
