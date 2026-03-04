@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { useProjectStore } from '@/stores/projectStore';
 import { getActiveTimeline } from '@/stores/projectStore';
 import { usePlaybackStore } from '@/stores/playbackStore';
+import { useTimelineSelectionStore } from '@/stores/timelineSelectionStore';
+import { useMediaSelectionStore } from '@/stores/mediaSelectionStore';
 import { getDragNodeData } from './NodePalette';
 import { getApiBaseUrl } from '@shared/getApiUrl';
 import type { TimelineNode } from '@/stores/projectStore';
@@ -272,6 +274,8 @@ export function PreviewPanel() {
   const { t } = useTranslation();
   const { project, addTimelineNode, getPendingFile } = useProjectStore();
   const { videoTime, playing, emptyFill } = usePlaybackStore();
+  const clearTimelineSelection = useTimelineSelectionStore((s) => s.clearSelection);
+  const setSelectedMediaPath = useMediaSelectionStore((s) => s.setSelectedMediaPath);
   const [dragOver, setDragOver] = useState(false);
 
   function handleDragOver(e: React.DragEvent) {
@@ -291,6 +295,13 @@ export function PreviewPanel() {
     if (node) addTimelineNode(node);
   }
 
+  function handleClickPreview() {
+    // Clicking the preview should show the global video/project configuration:
+    // clear any timeline and media selection so the right sidebar falls back to VideoConfigurationPanel.
+    clearTimelineSelection();
+    setSelectedMediaPath(null);
+  }
+
   return (
     <section className="flex-1 min-h-0 flex flex-col bg-slate-50 dark:bg-[#252525]">
       <div className="flex-1 min-h-0 flex flex-col p-4">
@@ -298,6 +309,7 @@ export function PreviewPanel() {
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
+          onClick={handleClickPreview}
           className={`relative flex-1 min-h-[200px] aspect-video rounded-lg border overflow-hidden transition-colors ${
             dragOver ? 'border-emerald-500/50 bg-emerald-100 dark:bg-emerald-500/5' : 'border-slate-300 dark:border-white/5'
           }`}

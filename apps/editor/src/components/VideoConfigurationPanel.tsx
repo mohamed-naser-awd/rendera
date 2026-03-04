@@ -1,10 +1,15 @@
 import { useTranslation } from 'react-i18next';
 import { usePlaybackStore } from '@/stores/playbackStore';
+import { useProjectStore } from '@/stores/projectStore';
 
 /** Global video/preview configuration shown when no timeline item is selected. */
 export function VideoConfigurationPanel() {
   const { t } = useTranslation();
   const { emptyFill, setEmptyFill } = usePlaybackStore();
+   const project = useProjectStore((s) => s.project);
+   const updateProject = useProjectStore((s) => s.updateProject);
+
+  const fps = project?.fps ?? 30;
 
   return (
     <div className="space-y-4">
@@ -12,6 +17,26 @@ export function VideoConfigurationPanel() {
         <h3 className="text-xs font-semibold text-slate-600 dark:text-white/70 uppercase tracking-wide">
           {t('editor.item.videoConfiguration', 'Video configuration')}
         </h3>
+        <div className="mt-2 space-y-1">
+          <label className="block text-xs font-medium text-slate-600 dark:text-white/70">
+            {t('editor.project.fps', 'Frames per second')}
+          </label>
+          <input
+            type="number"
+            min={1}
+            max={240}
+            step={1}
+            value={fps}
+            onChange={(e) => {
+              const v = Number(e.target.value);
+              if (!Number.isNaN(v) && project) {
+                const clamped = Math.max(1, Math.min(240, v));
+                updateProject({ fps: clamped });
+              }
+            }}
+            className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-white/20 bg-white dark:bg-[#1e1e1e] text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          />
+        </div>
         <label className="block text-xs font-medium text-slate-600 dark:text-white/70 mb-2">
           {t('editor.preview.emptyFill', 'Empty fill')}
         </label>

@@ -12,6 +12,7 @@ import { getDragNodeData, getDragMediaData, getDragTransitionData } from './Node
 import CropDialog from './CropDialog';
 import { RteTimeline } from './RteTimeline';
 import { DEFAULT_TRANSITION_DURATION } from '@/lib/transitions';
+import { getApiBaseUrl } from '@shared/getApiUrl';
 import {
   transformNoiseCancellation,
   transformNanoBanana,
@@ -68,6 +69,7 @@ export function TimelinePanel() {
     removeTimelineNodes,
     recordForUndo,
     setRecordingSuspended,
+    getPendingFile,
   } = useProjectStore();
   const { selectedIds, setSelection, clearSelection, isSelected } = useTimelineSelectionStore();
   const { videoTime, setVideoTime } = usePlaybackStore();
@@ -252,24 +254,72 @@ export function TimelinePanel() {
       const mediaList = Array.isArray(root?.media) ? root.media : [];
       const mediaItem = mediaList.find((m) => m.path === mediaData.path);
       const d = mediaItem?.defaults;
-      const duration = d?.duration ?? (mediaData.type === 'video' ? 10 : mediaData.type === 'text' ? 5 : 3);
-      addTimelineNode({
-        type: mediaData.type,
-        duration,
-        label: mediaData.label,
-        mediaPath: mediaData.path,
-        crop: d?.crop ?? undefined,
-        objectFit: d?.objectFit,
-        scale: d?.scale,
-        ...(mediaData.type === 'text' && {
-          text: d?.text ?? mediaData.label,
-          backgroundColor: d?.backgroundColor ?? '#ffffff',
-          textColor: d?.textColor ?? '#000000',
-          backgroundColorTransparent: d?.backgroundColorTransparent,
-          fontSize: d?.fontSize,
-        }),
-        trackIndex,
-      });
+      const baseDuration = d?.duration ?? (mediaData.type === 'video' ? 10 : mediaData.type === 'text' ? 5 : 3);
+
+      const placeNode = (finalDuration: number) => {
+        const safeDuration = Math.max(0.1, finalDuration || baseDuration);
+        addTimelineNode({
+          type: mediaData.type,
+          duration: safeDuration,
+          label: mediaData.label,
+          mediaPath: mediaData.path,
+          crop: d?.crop ?? undefined,
+          objectFit: d?.objectFit,
+          scale: d?.scale,
+          ...(mediaData.type === 'text' && {
+            text: d?.text ?? mediaData.label,
+            backgroundColor: d?.backgroundColor ?? '#ffffff',
+            textColor: d?.textColor ?? '#000000',
+            backgroundColorTransparent: d?.backgroundColorTransparent,
+            fontSize: d?.fontSize,
+          }),
+          trackIndex,
+        });
+      };
+
+      // For videos, try to use the actual media duration so the full clip is added.
+      if (mediaData.type === 'video' && project) {
+        const pendingFile = mediaData.path.startsWith('pending:')
+          ? getPendingFile(mediaData.path)
+          : undefined;
+
+        if (pendingFile) {
+          const url = URL.createObjectURL(pendingFile);
+          const videoEl = document.createElement('video');
+          videoEl.preload = 'metadata';
+          videoEl.onloadedmetadata = () => {
+            const duration = Number.isFinite(videoEl.duration) ? videoEl.duration : baseDuration;
+            URL.revokeObjectURL(url);
+            placeNode(duration);
+          };
+          videoEl.onerror = () => {
+            URL.revokeObjectURL(url);
+            placeNode(baseDuration);
+          };
+          videoEl.src = url;
+        } else {
+          const filename = mediaData.path.replace(/^media\//, '');
+          getApiBaseUrl()
+            .then((base) => {
+              const url = `${base}/api/projects/${project.id}/media/${filename}`;
+              const videoEl = document.createElement('video');
+              videoEl.preload = 'metadata';
+              videoEl.onloadedmetadata = () => {
+                const duration = Number.isFinite(videoEl.duration) ? videoEl.duration : baseDuration;
+                placeNode(duration);
+              };
+              videoEl.onerror = () => {
+                placeNode(baseDuration);
+              };
+              videoEl.src = url;
+            })
+            .catch(() => {
+              placeNode(baseDuration);
+            });
+        }
+      } else {
+        placeNode(baseDuration);
+      }
       return;
     }
     const node = getDragNodeData(e.dataTransfer);

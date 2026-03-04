@@ -60,6 +60,8 @@ export interface MediaItemDefaults {
 }
 
 export interface MediaItem {
+  /** Stable identifier so media items can be duplicated even if they share the same path. */
+  id: string;
   path: string;
   /** Defaults applied when adding this media to the timeline; also editable in media panel. */
   defaults?: MediaItemDefaults;
@@ -87,6 +89,12 @@ interface Project {
   id: string;
   name: string;
   description?: string;
+  /** Project resolution string, e.g. "1920x1080". */
+  resolution?: string;
+  /** Frames per second for this project. */
+  fps?: number;
+  /** Optional cached duration in seconds (from backend metadata). */
+  duration?: number;
   root: ProjectRoot;
 }
 
@@ -138,6 +146,9 @@ interface ProjectState {
   updateProject: (updates: {
     name?: string;
     description?: string;
+    resolution?: string;
+    fps?: number;
+    duration?: number;
     root?: ProjectRoot;
   }) => void;
   addTimeline: () => void;
@@ -172,20 +183,40 @@ interface ProjectState {
   addMediaPath: (path: string) => void;
   addTextMedia: () => string | null;
   updateMediaItem: (path: string, updates: Partial<MediaItem>) => void;
+  /** Remove a media item from the project media list by id. */
+  removeMediaItem: (id: string) => void;
   saveProject: () => Promise<void>;
   getPendingFile: (tempPath: string) => File | undefined;
 }
 
-/** Ensure root has timelines; migrate legacy root.items to single timeline. */
+function ensureMediaIds(root: ProjectRoot): ProjectRoot {
+  const media = Array.isArray(root.media) ? root.media : [];
+  if (media.length === 0) return root;
+  let changed = false;
+  const withIds: MediaItem[] = media.map((m, index) => {
+    const existing = m as MediaItem & { id?: string };
+    if (existing.id && typeof existing.id === 'string') {
+      return existing as MediaItem;
+    }
+    changed = true;
+    return {
+      ...existing,
+      id: `media-${index}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+    } as MediaItem;
+  });
+  return changed ? { ...root, media: withIds } : root;
+}
+
+/** Ensure root has timelines and media ids; migrate legacy root.items to single timeline. */
 function ensureTimelines(root: ProjectRoot): ProjectRoot {
   const timelines = root.timelines;
   if (Array.isArray(timelines) && timelines.length > 0) {
     const id = root.activeTimelineId ?? timelines[0].id;
     const hasActive = timelines.some((t) => t.id === id);
-    return {
+    return ensureMediaIds({
       ...root,
       activeTimelineId: hasActive ? id : timelines[0].id,
-    };
+    });
   }
   const legacyItems = Array.isArray(root.items) ? root.items : [];
   const migrated: Timeline = {
@@ -193,12 +224,12 @@ function ensureTimelines(root: ProjectRoot): ProjectRoot {
     name: 'Version 1',
     items: legacyItems,
   };
-  return {
+  return ensureMediaIds({
     ...root,
     timelines: [migrated],
     activeTimelineId: migrated.id,
     items: undefined,
-  };
+  });
 }
 
 /** Get the currently active timeline from root. Use for reading active timeline items. */
@@ -219,7 +250,14 @@ export const useProjectStore = create<ProjectState>((set, get) => {
     set({ undoStack: next, redoStack: [] });
   }
 
-  function applyLocalUpdate(updates: { name?: string; description?: string; root?: ProjectRoot }) {
+  function applyLocalUpdate(updates: {
+    name?: string;
+    description?: string;
+    resolution?: string;
+    fps?: number;
+    duration?: number;
+    root?: ProjectRoot;
+  }) {
     const { project } = get();
     if (!project) return;
     if (updates.root !== undefined && !recordingSuspended) recordForUndo();
@@ -230,6 +268,9 @@ export const useProjectStore = create<ProjectState>((set, get) => {
               ...s.project,
               ...(updates.name !== undefined && { name: updates.name }),
               ...(updates.description !== undefined && { description: updates.description }),
+              ...(updates.resolution !== undefined && { resolution: updates.resolution }),
+              ...(updates.fps !== undefined && { fps: updates.fps }),
+              ...(updates.duration !== undefined && { duration: updates.duration }),
               ...(updates.root !== undefined && { root: updates.root }),
             },
             isDirty: true,
@@ -320,6 +361,9 @@ export const useProjectStore = create<ProjectState>((set, get) => {
   updateProject: (updates: {
     name?: string;
     description?: string;
+    resolution?: string;
+    fps?: number;
+    duration?: number;
     root?: ProjectRoot;
   }) => {
     applyLocalUpdate(updates);
@@ -770,8 +814,9 @@ export const useProjectStore = create<ProjectState>((set, get) => {
     if (!project) return;
     recordForUndo();
     const tempPath = `pending:${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const id = `media-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     const media = Array.isArray(project.root?.media) ? [...project.root.media] : [];
-    media.push({ path: tempPath });
+    media.push({ id, path: tempPath });
     const root: ProjectRoot = { ...project.root, media };
     set((s) => ({
       project: s.project ? { ...s.project, root } : null,
@@ -784,7 +829,8 @@ export const useProjectStore = create<ProjectState>((set, get) => {
     if (!project) return;
     const media = Array.isArray(project.root?.media) ? [...project.root.media] : [];
     if (media.some((m) => m.path === path)) return;
-    media.push({ path });
+    const id = `media-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    media.push({ id, path });
     set((s) =>
       s.project
         ? { project: { ...s.project, root: { ...s.project.root, media } }, isDirty: true }
@@ -796,8 +842,9 @@ export const useProjectStore = create<ProjectState>((set, get) => {
     if (!project) return null;
     recordForUndo();
     const textPath = `text:${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const id = `media-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     const media = Array.isArray(project.root?.media) ? [...project.root.media] : [];
-    media.push({ path: textPath });
+    media.push({ id, path: textPath });
     applyLocalUpdate({ root: { ...project.root, media } });
     return textPath;
   },
@@ -814,6 +861,13 @@ export const useProjectStore = create<ProjectState>((set, get) => {
     const next = [...media];
     next[idx] = { ...next[idx], ...updates };
     applyLocalUpdate({ root: { ...project.root, media: next } });
+  },
+  removeMediaItem: (id: string) => {
+    const { project } = get();
+    if (!project) return;
+    recordForUndo();
+    const media = Array.isArray(project.root?.media) ? project.root.media.filter((m) => m.id !== id) : [];
+    applyLocalUpdate({ root: { ...project.root, media } });
   },
   saveProject: async () => {
     const { project, pendingMedia: pending, loadProject } = get();
@@ -845,12 +899,22 @@ export const useProjectStore = create<ProjectState>((set, get) => {
       items: t.items.map(mapMediaPath),
     }));
     root = { ...root, media: finalMedia, timelines };
+    const maxEnd = timelines.reduce((outerMax, tl) => {
+      const localMax = tl.items.length > 0
+        ? Math.max(...tl.items.map((n) => (n.startTime ?? 0) + n.duration))
+        : 0;
+      return Math.max(outerMax, localMax);
+    }, 0);
+    const duration = maxEnd > 0 ? maxEnd : null;
     const res = await fetch(`${baseUrl}/api/projects/${project.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name: project.name,
         description: project.description,
+        resolution: project.resolution,
+        fps: project.fps,
+        ...(duration !== null && { duration }),
         root,
       }),
     });

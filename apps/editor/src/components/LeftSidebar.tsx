@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useProjectStore } from '@/stores/projectStore';
+import { useProjectStore, getActiveTimeline } from '@/stores/projectStore';
 import type { MediaItem } from '@/stores/projectStore';
 import { TransitionsTab } from './TransitionsTab';
 import { TransformTab } from './TransformTab';
@@ -137,14 +137,14 @@ function MediaItemWithPreview({
 export function LeftSidebar() {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<(typeof TAB_IDS)[number]>('media');
-  const { project, addMedia, addMediaPath, addTextMedia, addTimelineNode, getPendingFile } = useProjectStore();
+  const { project, addMedia, addMediaPath, addTextMedia, addTimelineNode, getPendingFile, removeMediaItem } = useProjectStore();
   const { videoTime } = usePlaybackStore();
   const [dragOver, setDragOver] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT);
   const { selectedMediaPath, setSelectedMediaPath } = useMediaSelectionStore();
   const { clearSelection } = useTimelineSelectionStore();
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; path: string } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; id: string; path: string } | null>(null);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [transformBusy, setTransformBusy] = useState<string | null>(null);
   const [transformSubmenuOpen, setTransformSubmenuOpen] = useState(false);
@@ -157,7 +157,31 @@ export function LeftSidebar() {
   const resizeStartX = useRef<number>(0);
   const resizeStartWidth = useRef<number>(0);
 
-  const media: MediaItem[] = Array.isArray(project?.root?.media) ? project.root.media : [];
+  const root = project?.root;
+  const media: MediaItem[] = Array.isArray(root?.media) ? root.media : [];
+
+  const usedMediaPaths = useMemo(() => {
+    const used = new Set<string>();
+    if (!root) return used;
+    const timelines = root.timelines ?? [];
+    const visitNode = (node: any) => {
+      if (node.mediaPath) {
+        used.add(node.mediaPath);
+      }
+      if (Array.isArray(node.children)) {
+        node.children.forEach(visitNode);
+      }
+    };
+    timelines.forEach((tl) => {
+      (tl.items ?? []).forEach(visitNode);
+    });
+    return used;
+  }, [root]);
+
+  const isMediaUsed = useCallback(
+    (path: string) => usedMediaPaths.has(path),
+    [usedMediaPaths]
+  );
 
   async function runTransformFromMedia(
     path: string,
@@ -245,10 +269,8 @@ export function LeftSidebar() {
     }
     if (contextMenu) {
       window.addEventListener('click', closeContextMenu);
-      window.addEventListener('contextmenu', closeContextMenu);
       return () => {
         window.removeEventListener('click', closeContextMenu);
-        window.removeEventListener('contextmenu', closeContextMenu);
       };
     }
   }, [contextMenu]);
@@ -503,11 +525,16 @@ export function LeftSidebar() {
               ) : (
                 media.map((item, idx) => {
                   const isActive = selectedMediaPath === item.path;
+                  const inUse = isMediaUsed(item.path);
                   const isTextItem = item.path.startsWith('text:');
+                  const pendingFile = item.path.startsWith('pending:') ? getPendingFile(item.path) : undefined;
+                  const pendingLabelFallback = item.path.startsWith('pending:')
+                    ? item.path.split(':', 2)[1] ?? item.path
+                    : item.path;
                   const rawLabel = isTextItem
                     ? (item.defaults?.text?.trim() || t('editor.media.text', 'Text'))
                     : item.path.startsWith('pending:')
-                      ? getPendingFile(item.path)?.name ?? item.path
+                      ? pendingFile?.name ?? pendingLabelFallback
                       : item.path.replace(/^media\//, '');
                   const label = isTextItem && rawLabel.length > 20 ? rawLabel.slice(0, 20) + '…' : rawLabel;
                   const mediaType = getMediaType(item.path);
@@ -529,7 +556,9 @@ export function LeftSidebar() {
                       }}
                       onContextMenu={(e) => {
                         e.preventDefault();
-                        setContextMenu({ x: e.clientX, y: e.clientY, path: item.path });
+                        clearSelection();
+                        setSelectedMediaPath(item.path);
+                        setContextMenu({ x: e.clientX, y: e.clientY, id: item.id, path: item.path });
                       }}
                       className={`flex items-center gap-2 p-2 rounded-lg border cursor-grab active:cursor-grabbing transition-colors select-none ${
                         isActive
@@ -580,7 +609,13 @@ export function LeftSidebar() {
         <button
           type="button"
           className="w-full px-3 py-2 text-left text-sm text-slate-700 dark:text-white/90 hover:bg-slate-100 dark:hover:bg-[#383838] flex items-center gap-2"
-          onClick={() => { setContextMenu(null); /* TODO: open crop */ }}
+          onClick={() => {
+            if (contextMenu) {
+              clearSelection();
+              setSelectedMediaPath(contextMenu.path);
+            }
+            setContextMenu(null);
+          }}
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14" />
@@ -596,6 +631,32 @@ export function LeftSidebar() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
           </svg>
           {t('editor.media.changeColor', 'Change color')}
+        </button>
+        <div className="my-1 border-t border-slate-200 dark:border-white/10" />
+        <button
+          type="button"
+          className="w-full px-3 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 flex items-center gap-2 disabled:opacity-50"
+          disabled={isMediaUsed(contextMenu.path)}
+          title={
+            isMediaUsed(contextMenu.path)
+              ? t('editor.media.deleteDisabledInUse', 'Cannot delete: media is used in timeline')
+              : t('editor.media.delete', 'Delete media')
+          }
+          onClick={() => {
+            const { id, path } = contextMenu;
+            if (!isMediaUsed(path)) {
+              removeMediaItem(id);
+              if (selectedMediaPath === path) {
+                setSelectedMediaPath(null);
+              }
+            }
+            setContextMenu(null);
+          }}
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 7h12M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2m-7 0h8l-1 12H8L7 7z" />
+          </svg>
+          {t('editor.media.delete', 'Delete')}
         </button>
         <button
           type="button"

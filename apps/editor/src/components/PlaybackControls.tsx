@@ -1,12 +1,21 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { usePlaybackStore } from '@/stores/playbackStore';
 import { useTimelineDuration } from '@/hooks/useTimelineDuration';
+import { useProjectStore } from '@/stores/projectStore';
 
 export function PlaybackControls() {
   const { videoTime, playing, setVideoTime, setPlaying } = usePlaybackStore();
   const { maxEnd } = useTimelineDuration();
+  const project = useProjectStore((s) => s.project);
 
   const videoDuration = maxEnd > 0 ? maxEnd : 0.01;
+
+  // Use project FPS if available to derive a frame-based tick interval.
+  // Fallback to ~60 FPS when not set.
+  const tickMs = useMemo(() => {
+    const fps = project?.fps && project.fps > 0 ? project.fps : 60;
+    return Math.max(5, Math.min(1000, 1000 / fps));
+  }, [project?.fps]);
 
   function formatTime(sec: number) {
     const m = Math.floor(sec / 60);
@@ -14,18 +23,16 @@ export function PlaybackControls() {
     return `${m}:${s.toString().padStart(2, '0')}`;
   }
 
-  const TICK_MS = 10;
-
   useEffect(() => {
     if (!playing || videoDuration <= 0) return;
     const id = setInterval(() => {
       const state = usePlaybackStore.getState();
-      const next = Math.min(state.videoTime + TICK_MS / 1000, videoDuration);
+      const next = Math.min(state.videoTime + tickMs / 1000, videoDuration);
       state.setVideoTime(next);
       if (next >= videoDuration) state.setPlaying(false);
-    }, TICK_MS);
+    }, tickMs);
     return () => clearInterval(id);
-  }, [playing, videoDuration]);
+  }, [playing, videoDuration, tickMs]);
 
   function handleVideoSeek(value: number) {
     setVideoTime(Math.min(value, maxEnd));
